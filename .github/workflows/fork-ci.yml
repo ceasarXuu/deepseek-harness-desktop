@@ -64,9 +64,27 @@ jobs:
       - name: Install (immutable)
         run: pnpm install --frozen-lockfile
 
+      # The frozen-archive gate compares the manifest against the pre-change
+      # commit and falls back to HEAD only when the variable is UNSET: an empty
+      # value is used as-is and fails `git rev-parse`. The expression this fork
+      # inherited from the upstream pull-request job resolves to the empty
+      # string on a push, so the baseline is resolved here instead, and left
+      # unset when the event carries no usable commit (a first push, whose
+      # `before` is the null object id, and a manual dispatch, which has none).
+      - name: Resolve the archive baseline
+        run: |
+          case "${{ github.event_name }}" in
+            pull_request) ref="${{ github.event.pull_request.base.sha }}" ;;
+            *) ref="${{ github.event.before }}" ;;
+          esac
+          case "$ref" in
+            ''|0000000000000000000000000000000000000000)
+              echo 'No usable archive baseline; the gate compares against HEAD.' ;;
+            *)
+              echo "DSH_ARCHIVE_BASE_REF=$ref" >> "$GITHUB_ENV" ;;
+          esac
+
       - name: Run static gates
-        env:
-          DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
         run: pnpm run check:ci:static
 
   test:
@@ -113,6 +131,27 @@ jobs:
 
       - name: Install (immutable)
         run: pnpm install --frozen-lockfile
+
+      # The replayed scenarios execute real shell commands under the sandbox,
+      # whose Linux chain resolves bubblewrap before Landlock. A stock hosted
+      # image ships neither bubblewrap nor an unrestricted unprivileged user
+      # namespace, so the sandbox refuses to run and the scenarios that invoke
+      # the shell diverge. Upstream's consumer lane supplies both through this
+      # script; the pinned and checksum-verified payload keeps it off the
+      # runner's package transaction.
+      - name: Prepare bubblewrap
+        run: bash scripts/prepare-ci-bubblewrap.sh
+
+      # The pwsh-tool-turn scenario boots a composition that mounts the pwsh
+      # tool. That row is gated to win32, while the scenario's skip guard probes
+      # whether a `pwsh` executable runs — and the standard Ubuntu image ships
+      # PowerShell, so the guard admits a scenario whose composition can never
+      # mount the tool. Upstream's own Linux pools carry no pwsh, which is why
+      # the guard's inventory/platform mismatch is invisible there. Removing it
+      # restores the condition the guard is written for: the scenario skips as
+      # designed and the rest of that file still runs.
+      - name: Remove the preinstalled pwsh
+        run: if command -v pwsh >/dev/null 2>&1; then sudo rm -f "$(command -v pwsh)"; fi
 
       # Keyless: the snapshot suite replays recorded interactions against
       # expected transcripts and needs no model credential.

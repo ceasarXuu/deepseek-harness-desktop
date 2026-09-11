@@ -40,6 +40,18 @@ GitHub 只有在首次向本 fork push 之后才会注册 workflow 文件。因�
 
 这一要求写在 [`desktop/README.md`](../../../../desktop/README.md) 中，而不是在 `scripts/run-gates.ts` 里绕过。该脚本的 `node <npm_execpath>` 调用对 CI 安装的 pnpm 发行版而言是正确的，原生二进制发行版才是异常：它无法被 `node` 执行，也不是本仓库锁定的版本。为迁就它而弱化该调用，会把一个真实的配置错误藏在一个回退之后。
 
+## 本 fork 首次运行暴露出的条件
+
+在标准托管 runner 而非上游池上运行继承来的门禁，暴露出四项上游安排不会触及的条件。之所以记录它们，是因为它们是 harness 或标准 runner 镜像的性质，而不是本 fork 配置的产物。
+
+**归档基线必须是"未设置"而不是"空"。** [`scripts/verify-archived-agent-notes.ts`](../../../../scripts/verify-archived-agent-notes.ts) 以 `process.env.DSH_ARCHIVE_BASE_REF ?? 'HEAD'` 解析基线，因此未设置时回退到 `HEAD`，而空字符串会被原样使用并导致 `git rev-parse` 失败。上游 pull-request 任务中的表达式在其他任何事件下都会解析为空字符串；由于该任务只在 pull request 上运行，这在上游无害。本 fork 的 workflow 也在 push 上运行，因此它在一个步骤里解析基线，并在事件不携带可用提交时让该变量保持未设置。
+
+**标准 Ubuntu 镜像自带 PowerShell。** `pwsh-tool-turn` 场景的跳过守卫探测 `pwsh` 可执行文件能否运行，而挂载 pwsh 工具的组合是按 win32 门控的。在一个拥有该二进制的 Linux 主机上，守卫会放行一个其组合永远无法挂载该工具的场景，请求头随即发生偏离。上游的 Linux 池不携带 pwsh，因此这一错配在那里不可见。本 fork 的快照任务移除预装的二进制，从而恢复该守卫所针对的条件。
+
+**该场景中还有一个措辞陈旧的夹具。** 它的 `job_kill` 原因描述写的是 `forwarded to the task`，而源码与其余所有夹具写的是 `job`。该场景无法在任何未挂载 pwsh 工具的主机上运行，这正是该陈旧之处未被发现的原因。守卫与夹具在此都未修正：两者都归上游所有，而本 fork 的分叉预算只覆盖 [`desktop/README.md`](../../../../desktop/README.md) 中记录的那些追加式列表插入。
+
+**回放场景需要 bubblewrap。** 沙箱的 Linux 链路先解析 bubblewrap 再解析 Landlock，而标准托管镜像既不提供该二进制，也不提供不受限的非特权用户命名空间。[`scripts/prepare-ci-bubblewrap.sh`](../../../../scripts/prepare-ci-bubblewrap.sh) 两者都提供；上游的 consumer 通道会运行它，本 fork 的快照任务现在也会。
+
 ## Alternatives considered
 
 **就地编辑上游 workflow 以改runner。** 否决：它把七个上游拥有的文件变成每次拉取都要处理的合并冲突，只为获得一个单独 workflow 文件就能提供、且不必触碰它们的信号。
@@ -51,6 +63,10 @@ GitHub 只有在首次向本 fork push 之后才会注册 workflow 文件。因�
 **把本 fork 的任务改到自托管 runner。** 否决：本账号没有这样的 runner，桌面侧工作也不需要它们。标准 runner 在两分钟内即可跑完静态聚合。
 
 **弱化 `run-gates.ts` 以容忍原生 pnpm。** 否决，理由同上：该调用编码了一条真实要求，异常是本机工具链的选择，而不是仓库约束。
+
+**修正 `pwsh` 场景的守卫及其陈旧夹具。** 否决：两个文件都归上游所有，任一编辑都会在每次拉取时变成合并冲突。该守卫的缺陷是真实的——它检测的是二进制，而组合检测的是平台——本 fork 记录它而不修复它，因为修复它不会带来本 fork 需要的任何信号。上游贡献才是该修复的归宿，而本 fork 不做贡献。
+
+**在本 fork 上跳过快照通道。** 否决：它的十九个文件中十七个通过，且覆盖桌面发行版所启动的成型组合。移除该通道所需的环境条件，等于为了回避两处已知且有解释的偏离而丢弃这些覆盖。
 
 ## Consequences
 

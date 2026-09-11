@@ -40,6 +40,18 @@ The `desktop-release` environment restricts deployments to tags matching `deskto
 
 The requirement is stated in [`desktop/README.md`](../../../../desktop/README.md) rather than worked around in `scripts/run-gates.ts`. The script's `node <npm_execpath>` invocation is correct for the pnpm distributions CI installs, and the native-binary distribution is the anomaly: it is not executable by `node`, and it is not the version the repository pins. Weakening the invocation to accommodate it would hide a genuine misconfiguration behind a fallback.
 
+## Conditions the fork's first run surfaced
+
+Running the inherited gates on standard hosted runners rather than the upstream pools surfaced four conditions that the upstream arrangement does not exercise. Each is recorded because it is a property of the harness or of a stock runner image, not of this fork's configuration.
+
+**The archive baseline must be absent rather than empty.** [`scripts/verify-archived-agent-notes.ts`](../../../../scripts/verify-archived-agent-notes.ts) resolves its baseline as `process.env.DSH_ARCHIVE_BASE_REF ?? 'HEAD'`, so an unset variable falls back to `HEAD` while an empty string is used as-is and fails `git rev-parse`. The expression in the upstream pull-request job resolves to the empty string under any other event, which is harmless there because that job is pull-request-only. The fork's workflow runs on pushes too, so it resolves the baseline in a step and leaves the variable unset when the event carries no usable commit.
+
+**The standard Ubuntu image ships PowerShell.** The `pwsh-tool-turn` scenario's skip guard probes whether a `pwsh` executable runs, while the composition that mounts the pwsh tool is gated to win32. On a Linux host that has the binary, the guard admits a scenario whose composition cannot mount the tool, and the request header diverges. Upstream's Linux pools carry no pwsh, so the mismatch stays invisible there. The fork's snapshot job removes the preinstalled binary, which restores the condition the guard is written for.
+
+**A fixture in that scenario also carries stale wording.** Its `job_kill` reason description reads `forwarded to the task` where the source and every other fixture read `job`. The scenario cannot run on any host whose composition mounts no pwsh tool, which is the same reason the staleness was not caught. Neither the guard nor the fixture is corrected here: both are upstream-owned, and the fork's divergence budget covers only the additive list insertions recorded in [`desktop/README.md`](../../../../desktop/README.md).
+
+**The replayed scenarios need bubblewrap.** The sandbox's Linux chain resolves bubblewrap before Landlock, and a stock hosted image supplies neither the binary nor an unrestricted unprivileged user namespace. [`scripts/prepare-ci-bubblewrap.sh`](../../../../scripts/prepare-ci-bubblewrap.sh) supplies both; the upstream consumer lane runs it, and the fork's snapshot job now does too.
+
 ## Alternatives considered
 
 **Edit the upstream workflows in place to retarget their runners.** Rejected: it converts seven upstream-owned files into merge conflicts at every fetch, to obtain a signal that a separate workflow file provides without touching them.
@@ -51,6 +63,10 @@ The requirement is stated in [`desktop/README.md`](../../../../desktop/README.md
 **Retarget the fork's jobs onto self-hosted runners.** Rejected: no such runners exist for this account, and the desktop work does not need them. Standard runners run the static aggregate in under two minutes.
 
 **Weaken `run-gates.ts` to tolerate a native pnpm.** Rejected for the reason above: the invocation encodes a real requirement, and the anomaly is a local toolchain choice rather than a repository constraint.
+
+**Correct the `pwsh` scenario's guard and its stale fixture.** Rejected: both files are upstream-owned, so either edit becomes a merge conflict at every fetch. The guard's defect is real — it tests for a binary where the composition tests for a platform — and the fork records it rather than repairing it, because repairing it delivers no signal the fork needs. A contribution upstream would be the home for that fix, and this fork does not contribute.
+
+**Skip the snapshot lane on the fork.** Rejected: seventeen of its nineteen files pass and cover the assembled compositions the desktop distribution boots. Removing the environment conditions the lane needs would discard that coverage to avoid two known, explained divergences.
 
 ## Consequences
 

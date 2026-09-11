@@ -108,8 +108,19 @@ jobs:
       - name: Install (immutable)
         run: pnpm install --frozen-lockfile
 
+      # Capped rather than left to the default, which is one forked worker per
+      # CPU for each of the config's two projects. The process-bound project
+      # spawns real children, and its host-exit scenarios boot the harness
+      # through tsx, so they need CPU at the moment they run. Under the default
+      # on a four-CPU runner, eight workers plus the spawned children
+      # oversubscribe the machine and `packages/subprocess/subprocess-local`
+      # process-exit scenarios time out: the terminal scenario measures 332 ms
+      # in isolation and reached its 30 s ceiling on the loaded runner.
+      #
+      # No `--` separator: pnpm forwards it literally, and vitest would read
+      # every following flag as a filename filter.
       - name: Run unit tests
-        run: pnpm run test
+        run: pnpm run test --maxWorkers=2
 
   snapshot:
     name: snapshot replay
@@ -186,5 +197,8 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      # Same cap and reason as the Linux lane: a standard macOS runner has few
+      # CPUs, and the process-bound project's scenarios need one free when they
+      # spawn and boot a child.
       - name: Run unit tests
-        run: pnpm run test
+        run: pnpm run test --maxWorkers=2

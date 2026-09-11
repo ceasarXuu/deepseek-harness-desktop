@@ -52,6 +52,10 @@ GitHub 只有在首次向本 fork push 之后才会注册 workflow 文件。因�
 
 **回放场景需要 bubblewrap。** 沙箱的 Linux 链路先解析 bubblewrap 再解析 Landlock，而标准托管镜像既不提供该二进制，也不提供不受限的非特权用户命名空间。[`scripts/prepare-ci-bubblewrap.sh`](../../../../scripts/prepare-ci-bubblewrap.sh) 两者都提供；上游的 consumer 通道会运行它，本 fork 的快照任务现在也会。
 
+**单元测试套件需要为它自己派生的进程留出 CPU。** `packages/subprocess/subprocess-local/tests/process-exit.spec.ts` 通过 tsx 启动其场景宿主，并等待子进程发布就绪文件，而三十秒的上限从子进程启动时就开始计时。vitest 的默认值是每个 CPU 一个 fork worker，而该配置有两个 project，因此在四核 runner 上会运行八个 worker，再加上这些测试派生的子进程；终端场景因此撞上上限，而不是测量它在隔离状态下的 332 毫秒。本 fork 的单元测试任务限制了 worker 池，因为替代方案是让一个门禁为调度产物报告真实失败。
+
+**pnpm 不会剥离 `--` 分隔符。** `pnpm run test -- --maxWorkers=2` 到达 vitest 时是 `vitest run -- --maxWorkers=2`，该分隔符把选项变成了位置性的文件名过滤条件，于是选项被静默地忽略。可行的写法是 `pnpm run test --maxWorkers=2`。这一点值得写明，因为带分隔符的写法是最常被写出的那种，而它的失败是静默的：选项被当作过滤条件消费掉，运行只是使用了默认值。
+
 ## Alternatives considered
 
 **就地编辑上游 workflow 以改runner。** 否决：它把七个上游拥有的文件变成每次拉取都要处理的合并冲突，只为获得一个单独 workflow 文件就能提供、且不必触碰它们的信号。

@@ -52,6 +52,10 @@ Running the inherited gates on standard hosted runners rather than the upstream 
 
 **The replayed scenarios need bubblewrap.** The sandbox's Linux chain resolves bubblewrap before Landlock, and a stock hosted image supplies neither the binary nor an unrestricted unprivileged user namespace. [`scripts/prepare-ci-bubblewrap.sh`](../../../../scripts/prepare-ci-bubblewrap.sh) supplies both; the upstream consumer lane runs it, and the fork's snapshot job now does too.
 
+**The unit suite needs CPUs left over for the processes it spawns.** `packages/subprocess/subprocess-local/tests/process-exit.spec.ts` boots its scenario host through tsx and waits for the child to publish a readiness file, with a thirty-second ceiling that the child's own launch starts ticking. Vitest's default is one forked worker per CPU for each of the config's two projects, so a four-CPU runner runs eight workers plus the children those tests spawn, and the terminal scenario reached its ceiling instead of measuring its isolated 332 ms. The fork's unit job caps the pool, because the alternative is a gate that reports a real failure for a scheduling artifact.
+
+**pnpm does not strip the `--` separator.** `pnpm run test -- --maxWorkers=2` reaches vitest as `vitest run -- --maxWorkers=2`, where the separator turns the flag into a positional filename filter and the option is silently not applied. The form that works is `pnpm run test --maxWorkers=2`. This is worth stating because the separator form is the one most commonly written, and its failure is silent: the flags are consumed as filters and the run simply uses the defaults.
+
 ## Alternatives considered
 
 **Edit the upstream workflows in place to retarget their runners.** Rejected: it converts seven upstream-owned files into merge conflicts at every fetch, to obtain a signal that a separate workflow file provides without touching them.

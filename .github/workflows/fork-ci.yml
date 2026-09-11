@@ -1,0 +1,151 @@
+# CI for this fork.
+#
+# The upstream `.github/workflows/ci.yml` is kept unmodified but cannot run
+# here: its jobs target organization-restricted pools (`dsh-ubuntu-24-04-16core`,
+# `dsh-windows-2025-16core`) and self-hosted labels (`[self-hosted, linux, x64,
+# vm-backup]`, `[self-hosted, dsh-win-ci, windows]`) that do not exist for this
+# account, so a dispatched run would queue indefinitely instead of reporting.
+# This workflow is the fork's own signal and uses only standard GitHub-hosted
+# runners, which are free without a minute quota for public repositories.
+#
+# `pnpm/action-setup` is load-bearing rather than conventional.
+# `scripts/run-gates.ts` spawns every gate as `node <npm_execpath> ...`, which
+# works only when npm_execpath names a JavaScript entry point. The standalone
+# `@pnpm/exe` distribution — what a version manager such as mise installs
+# locally — points npm_execpath at a native binary, and every gate then fails
+# with `SyntaxError: Invalid or unexpected token`. Installing pnpm through this
+# action keeps npm_execpath on the JavaScript entry.
+name: Fork CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  # CI must never report to the production telemetry endpoint baked into the
+  # base composition; the row disables itself when this is set.
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  static:
+    name: static gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # A standard hosted Linux runner has four CPUs where the upstream pools
+      # have 8-16, and several gates each build a full ts.Program.
+      DSH_GATE_CONCURRENCY: '4'
+    steps:
+      # Complete history: the frozen-archive gate reads the trusted PR base.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      - name: Run static gates
+        env:
+          DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
+        run: pnpm run check:ci:static
+
+  test:
+    name: unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        run: pnpm run test
+
+  snapshot:
+    name: snapshot replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      # Keyless: the snapshot suite replays recorded interactions against
+      # expected transcripts and needs no model credential.
+      - name: Build and replay snapshots
+        run: pnpm run check:ci:snapshot
+
+  macos:
+    name: macos
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      # The desktop release targets macOS, so a macOS lane is the only place
+      # that catches platform-specific behavior in the packages it depends on:
+      # the node-pty addon, the Seatbelt sandbox rung, and the process
+      # inspection paths in the persistent terminal backend.
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Run unit tests
+        run: pnpm run test

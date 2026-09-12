@@ -33,8 +33,16 @@ const LOG_LIMIT = 2_000
 /** Environment variable naming a closure to use instead of the packaged one. */
 const CLOSURE_ENV = 'DSH_DESKTOP_CLOSURE'
 
-/** Entry point inside the closure, relative to its root. */
-const ENTRY_RELATIVE_PATH = 'node_modules/@deepseek-ai/dsh-desktop-app/lib/entry.js'
+/**
+ * Entry point inside the closure, relative to the closure root.
+ *
+ * The closure ships as one archive rather than a loose package tree, so this
+ * path crosses into it. Electron's patched `fs` reads it transparently, which is
+ * what lets the harness's Loader resolve plugins by bare name from inside the
+ * archive; the files it cannot read from there — native addons and the
+ * executables it spawns — sit in the sibling `.asar.unpacked` directory.
+ */
+const ENTRY_RELATIVE_PATH = 'harness.asar/node_modules/@deepseek-ai/dsh-desktop-app/lib/entry.js'
 
 /** One readiness payload, as the desktop bundle reports it. */
 interface Readiness {
@@ -53,18 +61,18 @@ let stopping = false
 const log: string[] = []
 
 /**
- * Locate the runtime closure.
+ * Locate the directory the closure sits in.
  *
- * A packaged application ships it under `Contents/Resources/harness`. A
- * development run names it through the environment, because the closure is a
- * build artifact and the shell cannot derive it from its own position in the
- * source tree.
- * @returns the absolute closure directory.
+ * A packaged application ships it beside the other resources. A development run
+ * names the build output directory through the environment, because the closure
+ * is a build artifact and the shell cannot derive it from its own position in
+ * the source tree.
+ * @returns the absolute directory containing `harness.asar`.
  */
 function resolveClosureDir(): string {
   const configured = process.env[CLOSURE_ENV]
   if (configured !== undefined && configured !== '') return configured
-  return join(process.resourcesPath, 'harness')
+  return process.resourcesPath
 }
 
 /**

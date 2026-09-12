@@ -91,8 +91,60 @@ function findLinks(dir, found = []) {
   return found
 }
 
+/**
+ * Files that are never loaded at runtime, removed to keep the artifact small.
+ *
+ * The installer's cost is file count rather than bytes: Finder enumerates the
+ * whole bundle before it copies any of it, so tens of thousands of declarations
+ * and source maps make installation slow for no runtime benefit.
+ *
+ * Only declarations and maps go. `lib/types/` stays: `tsc -b` emits real
+ * JavaScript there and `tsdown` bundles from it, so packages import each other's
+ * `lib/types/*.js` at runtime — removing the directory breaks the tree.
+ *
+ * Licenses stay, because redistributing a package without its license is not
+ * this build's decision to make. Sources stay, because several packages expose a
+ * `./src/*` export subpath that something may reach at runtime.
+ */
+const PRUNE_PATTERNS = [
+  /\.d\.ts$/,
+  /\.d\.ts\.map$/,
+  /\.map$/,
+]
+
+/** Remove every file matching the prune rules and return how many went. */
+function prune(dir) {
+  let removed = 0
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const child = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      removed += prune(child)
+      continue
+    }
+    if (PRUNE_PATTERNS.some(pattern => pattern.test(entry.name))) {
+      rmSync(child, { force: true })
+      removed++
+    }
+  }
+  return removed
+}
+
+/** Count files under `dir`, for reporting what a directory removal took with it. */
+function countFiles(dir) {
+  let total = 0
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    total += entry.isDirectory() ? countFiles(join(dir, entry.name)) : 1
+  }
+  return total
+}
+
 console.log(`build-closure: deploying ${manifest.name} to ${destination}`)
 rmSync(destination, { recursive: true, force: true })
+// A previous run's deploy (or its own) leaves the workspace install state where
+// pnpm's deps-status check wants to purge node_modules and refuses to without a
+// TTY. Restoring first is what makes this script runnable on its own rather than
+// only after a manual reinstall.
+run('pnpm', ['install', '--frozen-lockfile'])
 run('pnpm', [
   '--filter', manifest.name, 'deploy',
   '--legacy', '--prod',
@@ -118,22 +170,70 @@ for (const name of declared) {
 }
 if (repaired > 0) console.log(`build-closure: repaired ${String(repaired)} declared package(s) the deploy omitted`)
 
-// Copying a symlinked directory can surface links nested inside its contents, so
-// the pass repeats until the tree is link-free rather than assuming one sweep
-// reaches every depth.
-let materialized = 0
-for (let pass = 0; pass < 6; pass++) {
-  const replaced = materialize(join(destination, 'node_modules'))
-  materialized += replaced
-  if (replaced === 0) break
-}
+const materialized = (() => {
+  let total = 0
+  for (let pass = 0; pass < 6; pass++) {
+    const replaced = materialize(join(destination, 'node_modules'))
+    total += replaced
+    if (replaced === 0) break
+  }
+  return total
+})()
 const links = findLinks(join(destination, 'node_modules'))
 if (links.length > 0) fail(`${String(links.length)} symlink(s) remain, first: ${links[0]}`)
+
+const thinned = prune(destination)
 
 const missing = declared.filter(name => !present().has(name.slice('@deepseek-ai/'.length)))
 if (missing.length > 0) fail(`closure is incomplete, missing: ${missing.join(', ')}`)
 
+// ── pack: one archive instead of tens of thousands of files ─────────────────
+//
+// The installer's cost is file count, not bytes: Finder enumerates the whole
+// bundle before it copies any of it, so a closure staged as loose files makes
+// installation slow and looks nothing like a normal Electron application. The
+// archive is read through Electron's patched `fs`, which the harness's Loader
+// path exercises — `internal.import(name, baseUrl)` resolves bare specifiers
+// inside an asar, while Node's default ESM resolver does not, and the Loader is
+// the only party that resolves plugins.
+//
+// Two kinds of file cannot live in the archive: native addons, which the loader
+// cannot `dlopen` from it, and executables the harness spawns. `--unpack`
+// excludes them from the archive so the reads fall through to the sibling
+// `.asar.unpacked` directory, which is the same mechanism electron-builder's
+// `asarUnpack` uses.
+const archive = join(dirname(destination), 'harness.asar')
+const unpacked = `${archive}.unpacked`
+rmSync(archive, { force: true })
+rmSync(unpacked, { recursive: true, force: true })
+// The deploy above left the workspace's install state where pnpm's deps-status
+// check wants to purge node_modules and refuses to without a TTY. Restore it
+// before invoking anything through pnpm.
+run('pnpm', ['install', '--frozen-lockfile'])
+// One expression, not several: `--unpack` is an overwriting option, so a second
+// flag silently discards the first and only the last pattern survives. The brace
+// alternation keeps every rule in the single value the option accepts.
+//
+// The options also precede the positionals, where commander parses them; a
+// trailing `--unpack` is ignored entirely.
+run('pnpm', [
+  '--filter', '@deepseek-ai/dsh-desktop-shell', 'exec', 'asar', 'pack',
+  '--unpack', '**/{*.node,*.dylib,*.so,spawn-helper,rg,landlock-run}',
+  destination, archive,
+])
+if (!existsSync(unpacked)) fail(`no unpacked directory was produced at ${unpacked}`)
+if (!existsSync(archive)) fail(`packing produced no archive at ${archive}`)
+const unpackedFiles = existsSync(unpacked) ? countFiles(unpacked) : 0
+const packageCount = present().size
+// The staging tree is build residue once the archive holds it, and it has to go
+// after every count that reads it.
+rmSync(destination, { recursive: true, force: true })
+
 console.log(
-  `build-closure: ${String(present().size)} scoped packages, ${String(materialized)} path(s) materialized, `
-  + `${String(repaired)} repaired, 0 symlinks, all ${String(declared.length)} declared dependencies present`,
+  `build-closure: ${String(packageCount)} scoped packages, ${String(materialized)} path(s) materialized, `
+  + `${String(repaired)} repaired, 0 symlinks, ${String(thinned)} non-runtime file(s) pruned`,
+)
+console.log(
+  `build-closure: packed to ${archive} with ${String(unpackedFiles)} unpacked file(s); `
+  + `all ${String(declared.length)} declared dependencies present`,
 )

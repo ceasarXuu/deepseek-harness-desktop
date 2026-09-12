@@ -26,17 +26,23 @@ files:
   - package.json
 
 extraResources:
-  # Two entries because of one hardcoded rule: app-builder-lib's filter refuses
-  # any directory literally named `node_modules` at the root of a `from` source
-  # (`relative === "node_modules"` in util/filter.js), and no filter pattern
-  # overrides it. A closure is almost entirely node_modules, so the packages are
-  # named as their own source root, one level down, where the rule does not apply.
-  - from: ../../build/out/closure
-    to: harness
+  # The closure is one archive plus the files that cannot be read from inside it.
+  # Staging it as loose files instead means tens of thousands of small files,
+  # which Finder enumerates in full before it copies any of them.
+  #
+  # `harness.asar` is named as a file rather than a directory for a second
+  # reason: app-builder-lib's filter refuses any directory literally named
+  # `node_modules` at the root of a `from` source, and a closure is almost
+  # entirely node_modules.
+  - from: ../../build/out/harness.asar
+    to: harness.asar
     filter:
       - '**/*'
-  - from: ../../build/out/closure/node_modules
-    to: harness/node_modules
+  # The same rule applies one level down: naming `harness.asar.unpacked` as the
+  # source root puts its first child at `node_modules`, which the filter refuses.
+  # Naming that child as the root keeps the relative path clear of the rule.
+  - from: ../../build/out/harness.asar.unpacked/node_modules
+    to: harness.asar.unpacked/node_modules
     filter:
       - '**/*'
 

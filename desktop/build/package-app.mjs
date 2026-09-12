@@ -22,7 +22,8 @@ import { fileURLToPath } from 'node:url'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const shellDir = join(repo, 'desktop/apps/shell')
-const closureDir = join(repo, 'desktop/build/out/closure')
+const outputDir = join(repo, 'desktop/build/out')
+const closureArchive = join(outputDir, 'harness.asar')
 const skipClosure = process.argv.includes('--skip-closure')
 const archIndex = process.argv.indexOf('--arch')
 const arch = archIndex === -1 ? 'arm64' : (process.argv[archIndex + 1] ?? 'arm64')
@@ -43,9 +44,9 @@ function run(command, args, cwd) {
 }
 
 if (!skipClosure) {
-  run('node', [join(repo, 'desktop/build/build-closure.mjs'), closureDir], repo)
-} else if (!existsSync(join(closureDir, 'node_modules/@deepseek-ai/dsh-desktop-app/lib/entry.js'))) {
-  console.error(`package-app: --skip-closure given but no usable closure exists at ${closureDir}`)
+  run('node', [join(repo, 'desktop/build/build-closure.mjs')], repo)
+} else if (!existsSync(closureArchive)) {
+  console.error(`package-app: --skip-closure given but no closure archive exists at ${closureArchive}`)
   process.exit(1)
 }
 

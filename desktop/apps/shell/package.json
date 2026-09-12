@@ -11,6 +11,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@electron/asar": "^3.4.1",
     "@types/node": "^22.20.0",
     "electron": "^44.3.0",
     "electron-builder": "^26.0.0",

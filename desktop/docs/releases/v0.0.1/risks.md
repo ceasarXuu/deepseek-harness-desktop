@@ -18,7 +18,8 @@ The design rests on harness facts that were read from source and on packaging fa
 | `node-addon-require-builtin` is avoidable | **Verified on a running Electron child** | With `--expose-internals`, `internal/modules/esm/loader` resolves and `getOrInitializeCascadedLoader()` returns a loader; without it the same require fails with `MODULE_NOT_FOUND` |
 | The terminal addon loads under Electron | **Verified on a running Electron child** | The repository's `node-pty` prebuild — compiled for stock Node — loaded, opened a PTY, and returned the command's output, because the addon is N-API |
 | Electron's bundled Node satisfies the engine floor | **Verified from a running Electron child** | Electron 44.3.0 reports Node 24.20.0, with `node:zlib` zstd and `node:sqlite` both present |
-| The frozen closure serves the interface | **Unverified** | Composed of verified facts about path resolution, but the combination is the remaining Stage 0 item |
+| The frozen closure serves the interface | **Verified on a running closure** | A deployed closure booted, reported a loopback port, and served the index with the boot manifest injected, a 52 kB plugin bundle, and the static assets. Boot requires every workspace package present, which the deploy-root manifest and `verify-runtime-closure` already enforce |
+| A bare `pnpm deploy` produces a bootable closure | **Refuted** | `link:` overrides omit the vendored framework packages and disabled automatic peer installation omits peers; the spike restored both by hand to reach a boot |
 
 ## Risk register
 

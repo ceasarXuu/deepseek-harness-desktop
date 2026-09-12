@@ -12,11 +12,15 @@ The spike exists because three assumptions carry the whole design, and each is c
 |---|---|---|
 | Loader internals are reachable in an Electron child process | Launch the Electron binary with `ELECTRON_RUN_AS_NODE=1 --expose-internals`, require `internal/modules/esm/loader` through `createRequire`, and confirm `getOrInitializeCascadedLoader()` returns a loader, with the same require without the flag as the control | **Confirmed.** The flag resolves the loader; the control fails with `MODULE_NOT_FOUND` |
 | The terminal addon loads under Electron | Load the repository's `node-pty` prebuild in the same child, open a PTY, and read a command's output back | **Confirmed, and simpler than expected.** The addon is N-API, so the stock-Node prebuild loads without recompilation and no rebuild stage exists |
-| The frozen closure serves the interface | Materialize the closure with the deploy invocation, boot it from a directory, and load the interface in a browser at the reported port | **Open.** A closure that cannot serve the interface invalidates the composition rather than the carrier, so this is resolved before Stage 1 |
+| The frozen closure serves the interface | Deploy a closure, boot it from a directory, and request the interface and one client plugin bundle from the port it reports | **Confirmed, with a precondition.** The closure boots and serves the index with the boot manifest injected, each plugin bundle, and the static assets — but only after every workspace package is present, which a bare deploy does not produce |
 
 The spike also established the version facts the rest of the work depends on, recorded with the measurements in [`architecture.md`](architecture.md): Electron 44.3.0 ships Node 24.20.0, which satisfies the repository engine floor of `^22.19.0 || >=24.0.0`, and that Node exposes `node:zlib` zstd and `node:sqlite`.
 
-Two of the three assumptions resolved in the direction that removes work rather than adding it. Neither the Loader's native helper nor an addon rebuild is part of the artifact.
+All three assumptions resolved in the direction that removes work rather than adding it. Neither the Loader's native helper nor an addon rebuild is part of the artifact, and the closure's boot path is confirmed.
+
+**What the closure result means for Stage 1.** A bare `pnpm deploy` of the widest existing package produced a closure that deployed the frontend but could not boot: `link:` overrides left the two vendored framework packages out entirely, and peer dependencies were absent because the deploy ran with automatic peer installation disabled. Copying every built workspace package in made it boot, which isolates the remaining work as closure completeness rather than as a carrier or composition question.
+
+That is not a new problem to solve. The existing executable build already answers it with a deploy-root manifest that lists every needed package as a direct dependency, and [`scripts/verify-runtime-closure.ts`](../../../../scripts/verify-runtime-closure.ts) fails the build when a workspace peer is missing. Stage 1 reuses both rather than inventing a second mechanism.
 
 **Exit criteria.** Each of the three assumptions is confirmed or refuted with a recorded command and its output, and the carrier selection in [`architecture.md`](architecture.md) is either confirmed or revised.
 

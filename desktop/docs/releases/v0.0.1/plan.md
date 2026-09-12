@@ -120,7 +120,7 @@ No decision blocks the start of work. The items below are deferred to the stage 
 
 | Decision | Needed by | Options |
 |---|---|---|
-| Notarization credentials | Stage 3 | An App Store Connect API key or an Apple ID with an app-specific password. Signing works without them; a DMG that a recipient can launch does not |
+| Exporting the signing certificate for CI | Stage 3 | Keychain Access exports one selected identity; `security export -t identities` writes every identity in the keychain, including the App Store distribution certificates, into one archive |
 | Whether the minimum macOS version is acceptable | Stage 3 | Depends on the measured value. A lower floor would mean choosing an older Electron line at the cost of an older Chromium |
 
-The release environment `desktop-release` is configured: it restricts deployments to tags matching `desktop-v*` and requires a reviewer before a deployment proceeds.
+The release environment `desktop-release` is configured: it restricts deployments to tags matching `desktop-v*` and requires a reviewer before a deployment proceeds. The notarization credential is validated against the notary service and stored under the keychain profile `dsh-notarization`; [`packaging.md`](packaging.md) records the values and what each CI secret receives.

@@ -108,19 +108,27 @@ Notarization is submitted with `notarytool` and the result is stapled to the `.a
 
 Developer ID signing and notarization both require the paid Apple Developer Program membership. A free Apple ID issues development certificates that sign only for registered devices and cannot distribute or notarize.
 
-The Developer ID Application certificate is installed on the build machine, so local builds can sign immediately. Notarization needs credentials that are not yet configured, and they come from one of two sources.
+The Developer ID Application certificate is installed on the build machine, so local builds can sign immediately, and the notarization credential is validated against the notary service. What remains is moving both into CI.
 
 | Item | Where it comes from | Secret | State |
 |---|---|---|---|
-| Developer ID Application certificate | Certificates, Identifiers and Profiles, exported as a password-protected `.p12` | `CSC_LINK`, `CSC_KEY_PASSWORD` | Present in the login keychain; still needs exporting for CI |
-| App Store Connect API key: the `.p8` file | Users and Access, Integrations | `APPLE_API_KEY` | Not configured |
-| The same key's key identifier | The same page | `APPLE_API_KEY_ID` | Not configured |
-| The key's issuer identifier | The same page | `APPLE_API_ISSUER` | Not configured |
+| Developer ID Application certificate | Certificates, Identifiers and Profiles, exported as a password-protected `.p12` | `CSC_LINK`, `CSC_KEY_PASSWORD` | In the build machine's login keychain. The export for CI remains |
+| App Store Connect API key: the `.p8` file | Users and Access, Integrations | `APPLE_API_KEY` | Held by the build machine. Validated against the notary service |
+| The key's key identifier | The same page | `APPLE_API_KEY_ID` | `3DG45FCXBV` |
+| The key's issuer identifier | The same page | `APPLE_API_ISSUER` | Recorded with the key. Team-scoped and displayed on the integration page; held with the key rather than in this repository |
 | Team identifier | Membership | Not secret, recorded with each release | `3BCJ5SAVU2` |
 
 An App Store Connect API key is preferred over an Apple ID with an app-specific password because the key is scoped, revocable, and does not depend on a person's account credentials. Either satisfies `notarytool`.
 
-Until notarization credentials exist, a locally built DMG is signed and installs on a machine that accepts it explicitly, but a machine that downloads it will refuse to launch it because the notarization ticket is absent. That is the difference between a build for the person producing it and a build for a recipient.
+The key is a **Team Key**, so it requires the issuer identifier: `notarytool` rejects a team key without one and accepts an individual key only when none is supplied. The local credential is stored under the keychain profile `dsh-notarization`, which is what a build command passes to `--keychain-profile`.
+
+Verification is a submission-history query rather than the presence of a keychain item, because `store-credentials` reports success for a profile that was never validated against Apple:
+
+```
+xcrun notarytool history --keychain-profile dsh-notarization
+```
+
+Exporting the certificate is the one step that cannot be done safely from the command line. `security export -t identities` writes every identity in the keychain into one archive, which for this machine means the App Store distribution certificates and their private keys travel with the Developer ID one for no benefit. Keychain Access exports a single selected identity and is what the CI secret should be built from.
 
 The certificate is team-scoped and valid for years, but it is the single artifact that makes every published release verifiable and updatable, so its expiry is tracked rather than rediscovered during a release.
 

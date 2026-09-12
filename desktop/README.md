@@ -67,6 +67,34 @@ A standalone pnpm binary — the `@pnpm/exe` distribution that a version manager
 
 The remedy is to place a JavaScript pnpm at the pinned version ahead of the binary on `PATH`. CI satisfies this by construction, because `pnpm/action-setup` installs pnpm at the version `package.json` pins.
 
+### Building locally
+
+Three levels of cost, for three kinds of change.
+
+**Run from the source tree.** The shell reads the closure directory from `DSH_DESKTOP_CLOSURE`, so changes to the shell or to the desktop bundle need no packaging at all:
+
+```sh
+pnpm --filter @deepseek-ai/dsh-desktop-app run build
+pnpm --filter @deepseek-ai/dsh-desktop-shell run build
+DSH_DESKTOP_CLOSURE="$PWD/desktop/build/out/closure" \
+  ./desktop/apps/shell/node_modules/.bin/electron desktop/apps/shell
+```
+
+This is the loop for interface work and harness behavior. It exercises the same child process, readiness record, and window the packaged application uses, and it skips signing entirely.
+
+**Install a development build.** `--dir` stops after the assembled application, so there is no installer to compress and no notarization round trip:
+
+```sh
+node desktop/build/package-app.mjs --dir
+ditto "desktop/apps/shell/dist/mac-arm64/DeepSeek Harness.app" "/Applications/DeepSeek Harness.app"
+```
+
+Use this to check what the packaged application actually does — Resources paths, the login-shell `PATH` resolution, crash handling — none of which the source-tree run reproduces. Updates are not testable here: the updater reads the release feed, and a `--dir` build carries no installer to update from.
+
+**Build the deliverable.** `node desktop/build/package-app.mjs` produces the DMG and the ZIP, signed with the keychain identity. Add `DSH_DESKTOP_NOTARIZE=1` with notarization credentials in the environment to produce what a release ships.
+
+All three reuse whatever closure exists, because the closure is the slow step and changes least. `--skip-closure` is therefore implied once one has been built; delete `desktop/build/out/harness.asar` to force a rebuild after changing a harness package.
+
 ## Releases
 
 | Version | Status | Target | Docs |

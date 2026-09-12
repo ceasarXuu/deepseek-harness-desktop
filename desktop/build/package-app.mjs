@@ -13,7 +13,11 @@
  * un-notarized artifact installs where it is accepted explicitly, which is what
  * a local build is for. The release workflow sets it.
  *
- * Usage: node desktop/build/package-app.mjs [--skip-closure] [--arch arm64]
+ * `--dir` stops after the unpacked application, which is what a development
+ * machine installs: no installer to compress, no notarization round trip, and
+ * the staged bundle is kept because it is the result rather than an intermediate.
+ *
+ * Usage: node desktop/build/package-app.mjs [--skip-closure] [--dir] [--arch arm64]
  */
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
@@ -25,6 +29,7 @@ const shellDir = join(repo, 'desktop/apps/shell')
 const outputDir = join(repo, 'desktop/build/out')
 const closureArchive = join(outputDir, 'harness.asar')
 const skipClosure = process.argv.includes('--skip-closure')
+const dirOnly = process.argv.includes('--dir')
 const archIndex = process.argv.indexOf('--arch')
 const arch = archIndex === -1 ? 'arm64' : (process.argv[archIndex + 1] ?? 'arm64')
 
@@ -65,11 +70,19 @@ run('pnpm', ['install', '--frozen-lockfile'], repo)
 run('pnpm', ['--filter', '@deepseek-ai/dsh-desktop-shell', 'run', 'build'], repo)
 
 const notarize = process.env['DSH_DESKTOP_NOTARIZE'] === '1'
+const staging = join(shellDir, 'dist', `mac-${arch}`)
 run('pnpm', [
   '--filter', '@deepseek-ai/dsh-desktop-shell', 'exec', 'electron-builder',
   '--mac', `--${arch}`,
-  `--config.mac.notarize=${String(notarize)}`,
+  // `--dir` is mutually exclusive with the notarize override: electron-builder
+  // rejects the combination, and an unpacked application is never notarized.
+  ...(dirOnly ? ['--dir'] : [`--config.mac.notarize=${String(notarize)}`]),
 ], repo)
+
+if (dirOnly) {
+  console.log(`package-app: unpacked application at ${staging}`)
+  process.exit(0)
+}
 
 // Only the deliverable survives a build. electron-builder stages the assembled
 // application under `dist/mac-arm64` and produces the DMG and ZIP from it; that
@@ -77,7 +90,6 @@ run('pnpm', [
 // behind means every build permanently costs its own copy of the application.
 // The removal happens after the artifacts exist, so a failed build keeps its
 // evidence.
-const staging = join(shellDir, 'dist', `mac-${arch}`)
 const artifacts = [`DeepSeek Harness-${version()}-${arch}.dmg`, `DeepSeek Harness-${version()}-${arch}-mac.zip`]
   .map(name => join(shellDir, 'dist', name))
 if (artifacts.every(path => existsSync(path))) {

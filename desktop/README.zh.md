@@ -67,6 +67,34 @@ harness 本身位于 [`packages/`](../packages/README.md) 与 [`apps/cli`](../ap
 
 补救办法是在 `PATH` 中把锁定版本的 JavaScript 版 pnpm 排到该二进制之前。CI 天然满足这一点，因为 `pnpm/action-setup` 安装的正是 `package.json` 锁定的版本。
 
+### 本地构建
+
+三档成本，对应三类改动。
+
+**直接从源码树运行。** 外壳从 `DSH_DESKTOP_CLOSURE` 读取闭包目录，因此改动外壳或桌面组合包完全不需要打包：
+
+```sh
+pnpm --filter @deepseek-ai/dsh-desktop-app run build
+pnpm --filter @deepseek-ai/dsh-desktop-shell run build
+DSH_DESKTOP_CLOSURE="$PWD/desktop/build/out/closure" \
+  ./desktop/apps/shell/node_modules/.bin/electron desktop/apps/shell
+```
+
+这是界面工作与 harness 行为的主力循环。它跑的是与打包应用同一个子进程、同一条就绪记录、同一个窗口，且完全跳过签名。
+
+**安装一个开发版。** `--dir` 在组装出应用之后就停下，因此既不需要压缩安装包，也没有公证往返：
+
+```sh
+node desktop/build/package-app.mjs --dir
+ditto "desktop/apps/shell/dist/mac-arm64/DeepSeek Harness.app" "/Applications/DeepSeek Harness.app"
+```
+
+用它可以验证打包后的应用真实行为 —— Resources 路径、登录 shell 的 `PATH` 解析、崩溃处理 —— 这些都不是源码树运行能复现的。但这里测不了更新：更新器读的是发布源，而 `--dir` 产物里没有可供更新的安装包。
+
+**构建交付物。** `node desktop/build/package-app.mjs` 产出 DMG 与 ZIP，并使用钥匙串中的身份签名。加上 `DSH_DESKTOP_NOTARIZE=1` 并在环境中提供公证凭据，产出的就是发布所用的东西。
+
+三者都复用已有的闭包，因为闭包是最慢的一步、也是变化最少的一步。因此一旦构建过一次，就相当于隐含了 `--skip-closure`；改动 harness 包后要强制重建，删除 `desktop/build/out/harness.asar` 即可。
+
 ## 发布
 
 | 版本 | 状态 | 目标 | 文档 |

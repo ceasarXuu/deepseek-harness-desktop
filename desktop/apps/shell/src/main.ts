@@ -44,6 +44,18 @@ const CLOSURE_ENV = 'DSH_DESKTOP_CLOSURE'
  */
 const ENTRY_RELATIVE_PATH = 'harness.asar/node_modules/@deepseek-ai/dsh-desktop-app/lib/entry.js'
 
+/**
+ * The PTY spawn helper, inside the archive's unpacked sibling directory.
+ *
+ * `node-pty` launches this helper and locates it beside the prebuilt addon it
+ * loaded, which is a path inside the archive; a process launch cannot execute
+ * one, so the shell names the real file for the child instead. The variable is
+ * the override [`patches/node-pty@1.1.0.patch`](../../../patches/node-pty@1.1.0.patch)
+ * reads before falling back to that path. A development run boots from a loose
+ * closure, where the fallback is already a real path and this file is absent.
+ */
+const PTY_HELPER_RELATIVE_PATH = `harness.asar.unpacked/node_modules/node-pty/prebuilds/${process.platform}-${process.arch}/spawn-helper`
+
 /** One readiness payload, as the desktop bundle reports it. */
 interface Readiness {
   port: number
@@ -110,8 +122,10 @@ function record(stream: 'stdout' | 'stderr', line: string): void {
  * @returns the child's readiness record.
  */
 function startHarness(): Promise<Readiness> {
-  const entry = join(resolveClosureDir(), ENTRY_RELATIVE_PATH)
+  const closureDir = resolveClosureDir()
+  const entry = join(closureDir, ENTRY_RELATIVE_PATH)
   if (!existsSync(entry)) throw new Error(`harness entry not found at ${entry}`)
+  const ptyHelper = join(closureDir, PTY_HELPER_RELATIVE_PATH)
 
   const spawned = spawn(process.execPath, ['--expose-internals', entry], {
     env: {
@@ -121,6 +135,10 @@ function startHarness(): Promise<Readiness> {
       DSH_TELEMETRY_DISABLED: '1',
       DSH_DESKTOP_VERSION: app.getVersion(),
       ELECTRON_RUN_AS_NODE: '1',
+      // Only in a packaged run: a loose closure has no archive for the helper
+      // to be outside of, and pointing node-pty at a path that is not there
+      // fails every terminal the way the archive path did.
+      ...(existsSync(ptyHelper) ? { DSH_NODE_PTY_SPAWN_HELPER: ptyHelper } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     cwd: app.getPath('home'),

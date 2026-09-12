@@ -53,8 +53,8 @@ Everything in this table must survive copy, keep its executable bit, and carry a
 | Artifact | Source | Reached how | Packaging consequence |
 |---|---|---|---|
 | `pty.node` | `node-pty`, an N-API addon | Eager static import in `@deepseek-ai/dsh-subprocess-local` | Must load before tree construction completes, which the shipped prebuild does without recompilation. It must still be unpacked outside `asar` |
-| `spawn-helper` | `node-pty` | Spawned by the addon when a PTY opens | Executable bit, signed, and locatable. The patched loader probes `process.execPath + '-spawn-helper'` first and honours `DSH_NODE_PTY_SPAWN_HELPER`, so the helper may sit beside the Electron binary instead of inside the addon directory. In the measured arrangement the addon's own directory supplies it and neither override is needed |
-| `rg` | `@vscode/ripgrep`, platform optional package | Lazily imported on first search tool call | Must be a real executable file outside `asar` |
+| `spawn-helper` | `node-pty` | Spawned by the addon when a PTY opens | Executable bit, signed, and locatable. The addon locates it beside the prebuilt tree it loaded — a path inside `asar` — so the shell names the real unpacked file through `DSH_NODE_PTY_SPAWN_HELPER`, the override the patched loader reads before that path |
+| `rg` | `@vscode/ripgrep`, platform optional package | Lazily imported on first search tool call | Must be an executable file at a real path outside `asar`: the closure build unpacks it, and `resolveRgPath()` returns the unpacked sibling of the path the packaged module resolves, because a launch does not read through the archive |
 | `libvips` and its `sharp` addon | `sharp`, `@img/sharp-*` platform packages | Imported by `@deepseek-ai/dsh-attachment-local` | Native addon plus a dynamically loaded library; both signed |
 | `lib/worker.cjs` entries | `@deepseek-ai/dsh-workflow-worker-thread`, `@deepseek-ai/dsh-code-runtime-worker-thread` | `new Worker(fileURLToPath(...))` | Must remain a sibling CommonJS file next to its built host, and `import.meta.url` must survive packaging unchanged |
 
@@ -104,7 +104,7 @@ Signing the closure's binaries individually is what makes step 4 verifiable: `co
 
 ### Notarization
 
-Notarization is submitted with `notarytool` and the result is stapled to the `.app` before the DMG is built, so the DMG contains an already-stapled application and works on a machine that is offline at first launch. The DMG itself is then signed and, if the toolchain supports it, stapled as well.
+Notarization is submitted with `notarytool` and the result is stapled to the `.app` before the DMG is built, so the DMG contains an already-stapled application and works on a machine that is offline at first launch. The DMG container is not signed and carries no ticket of its own: Gatekeeper evaluates the application it contains, which is the artifact `spctl` and `stapler validate` are run against.
 
 ### Signing credentials
 

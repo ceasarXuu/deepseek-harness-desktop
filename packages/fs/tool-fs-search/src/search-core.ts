@@ -19,6 +19,7 @@
  * @module @deepseek-ai/dsh-tool-fs-search/search-core
  */
 
+import { existsSync } from 'node:fs'
 import { isAbsolute, relative, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
@@ -156,6 +157,26 @@ function completeStdout(toolName: string, stdout: SubprocessOutputRead, rawOutpu
 let rgPathPromise: Promise<string> | undefined
 
 /**
+ * The path a process launch can actually execute.
+ *
+ * A packaged deployment ships its closure inside an Electron archive, so a
+ * file's resolved path runs through the archive itself. Electron's patched
+ * `fs` reads the unpacked copy transparently, but a launch does not go through
+ * that patch: the operating system receives a path whose parent is a file and
+ * fails with `ENOTDIR`. The archive's unpack rules place the same file at the
+ * same relative path under `<archive>.unpacked`, which is a real path.
+ * @param resolved - the path a packaged module resolved for itself.
+ * @returns the unpacked sibling when it exists, else `resolved` unchanged.
+ */
+function executablePath(resolved: string): string {
+  const archive = `.asar${sep}`
+  const at = resolved.indexOf(archive)
+  if (at === -1) return resolved
+  const unpacked = `${resolved.slice(0, at)}.asar.unpacked${sep}${resolved.slice(at + archive.length)}`
+  return existsSync(unpacked) ? unpacked : resolved
+}
+
+/**
  * The packaged ripgrep binary path, resolved lazily once per process.
  *
  * `@vscode/ripgrep` resolves its platform package (`@vscode/ripgrep-<platform>
@@ -165,11 +186,14 @@ let rgPathPromise: Promise<string> | undefined
  * boundary keeps that failure at the first search call as `SEARCH_FAILED` —
  * the package's documented no-load-time-probe contract.
  *
+ * The resolved path is unwrapped by {@link executablePath}, because a packaged
+ * deployment's archive path cannot be launched.
+ *
  * @returns the packaged binary's absolute path; the memoized promise rejects
  *   when the platform package cannot be resolved.
  */
 export function resolveRgPath(): Promise<string> {
-  rgPathPromise ??= import('@vscode/ripgrep').then(module => module.rgPath)
+  rgPathPromise ??= import('@vscode/ripgrep').then(module => executablePath(module.rgPath))
   return rgPathPromise
 }
 

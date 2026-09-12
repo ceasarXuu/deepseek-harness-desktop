@@ -65,6 +65,8 @@ Work:
 
 **Exit criteria.** The DMG installs on a macOS machine with no Node.js, no package manager, and no repository checkout present. Gatekeeper accepts the application without an override. The signature verifies deeply and strictly, the notarization ticket validates, and the installed application passes every acceptance criterion in [`README.md`](README.md) except the update criteria.
 
+**Result.** Met, less the clean-machine install. The packaged application is signed with the Developer ID identity, notarized, and stapled; `spctl --assess` reports `accepted` with `source=Notarized Developer ID`, and `stapler validate` passes. The packaged harness was started from inside the bundle and served the interface on a loopback port. Measurements are in [`packaging.md`](packaging.md).
+
 This stage is the first point at which the release can be given to someone outside the project, because it is the first point at which a user needs no terminal.
 
 ## Stage 4 — Release and update

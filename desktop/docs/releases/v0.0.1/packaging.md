@@ -146,6 +146,23 @@ The signed result names the full chain and reports the timestamp Apple issued, w
 
 The certificate is team-scoped and valid for years, but it is the single artifact that makes every published release verifiable and updatable, so its expiry is tracked rather than rediscovered during a release.
 
+## What the first packaged build measured
+
+| Property | Measured |
+|---|---|
+| Closure inside the bundle | 355 MB, 196 scoped packages |
+| Application bundle | 655 MB |
+| DMG | 202 MB |
+| ZIP, the artifact the updater consumes | 186 MB |
+| Gatekeeper | `accepted`, `source=Notarized Developer ID` |
+| Notarization ticket | stapled; `stapler validate` passes on the installed bundle |
+
+### Two packaging rules that are not obvious
+
+**`extraResources` refuses a `node_modules` at the root of its `from` source.** The rule is unconditional in `app-builder-lib`'s filter — `relative === "node_modules"` returns false before any pattern is consulted — and a closure is almost entirely `node_modules`, so the first packaged build shipped a closure containing one file. Naming the packages as their own source root copies them one level down, where the rule does not apply.
+
+**The shell must not look for `spawn-helper` beside the Electron binary.** The `node-pty` patch probes `process.execPath + '-spawn-helper'` first, and in this bundle the Electron binary sits in `Contents/MacOS/` with no such sibling, so the probe falls through to the addon's own directory, which has one. Neither `DSH_NODE_PTY_SPAWN_HELPER` nor a staged copy is needed.
+
 ## DMG
 
 The installer is a single DMG per architecture containing the application and an `Applications` symlink, with a background image and a fixed icon layout so the drag-to-install gesture is obvious.

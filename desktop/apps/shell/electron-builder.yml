@@ -13,13 +13,32 @@ copyright: Copyright © 2026 Xu Zhang
 directories:
   output: dist
 
+# The update feed. This is compiled into the application as `app-update.yml`, so
+# the repository named here is the one an installed copy asks for its next
+# version — the release origin recorded in distribution.md, not a per-build flag.
+publish:
+  provider: github
+  owner: ceasarXuu
+  repo: deepseek-harness-desktop
+
 files:
   - lib/**/*
   - package.json
 
 extraResources:
+  # Two entries because of one hardcoded rule: app-builder-lib's filter refuses
+  # any directory literally named `node_modules` at the root of a `from` source
+  # (`relative === "node_modules"` in util/filter.js), and no filter pattern
+  # overrides it. A closure is almost entirely node_modules, so the packages are
+  # named as their own source root, one level down, where the rule does not apply.
   - from: ../../build/out/closure
     to: harness
+    filter:
+      - '**/*'
+  - from: ../../build/out/closure/node_modules
+    to: harness/node_modules
+    filter:
+      - '**/*'
 
 mac:
   category: public.app-category.developer-tools

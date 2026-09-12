@@ -1,0 +1,4 @@
+# Build outputs of the desktop subtree. `lib/` is already ignored repository-wide;
+# these are the paths the packaging pipeline creates that are not.
+build/out/
+apps/shell/dist/

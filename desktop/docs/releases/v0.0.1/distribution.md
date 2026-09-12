@@ -90,18 +90,17 @@ The workflow depends on the signing and notarization secrets listed in [`packagi
 | Stage | Action | Failure mode it prevents |
 |---|---|---|
 | 1. Build | Install, build the library and web faces, build the frontend | Shipping a stale frontend `dist/` |
-| 2. Closure | Materialize the deploy root, replace symlinks with bytes, strip package-manager links | A closure that depends on symlinks the recipient does not have |
-| 3. Addon rebuild | Rebuild `node-pty` against the Electron ABI, restore the spawn-helper executable bit | A boot failure at the terminal capability's import |
-| 4. Assemble | Copy the closure into `Contents/Resources/harness/`, write the configuration and preset roots | A closure that resolves but is not where the composition looks |
-| 5. Sign | Sign nested artifacts innermost-first, then the bundle | A Gatekeeper rejection on a user's machine |
-| 6. Notarize | Submit with `notarytool`, wait, staple | A first launch that requires network access or is blocked offline |
-| 7. Package | Produce the DMG and the ZIP | A missing update artifact |
-| 8. Verify | Run the checks in [`packaging.md`](packaging.md) against the built bundle | Shipping an artifact that fails on a clean machine |
-| 9. Publish | Attach the artifacts and the update metadata to the release | An installed application never seeing the version |
+| 2. Closure | Materialize the deploy root, replace symlinks with bytes, strip package-manager links, restore the `spawn-helper` executable bit | A closure that depends on symlinks the recipient does not have, or a PTY that cannot start for want of an executable helper |
+| 3. Assemble | Copy the closure into `Contents/Resources/harness/`, write the configuration and preset roots | A closure that resolves but is not where the composition looks |
+| 4. Sign | Sign nested artifacts innermost-first, then the bundle | A Gatekeeper rejection on a user's machine |
+| 5. Notarize | Submit with `notarytool`, wait, staple | A first launch that requires network access or is blocked offline |
+| 6. Package | Produce the DMG and the ZIP | A missing update artifact |
+| 7. Verify | Run the checks in [`packaging.md`](packaging.md) against the built bundle | Shipping an artifact that fails on a clean machine |
+| 8. Publish | Attach the artifacts and the update metadata to the release | An installed application never seeing the version |
 
-Stage 2 uses the same `pnpm deploy` invocation shape as the existing executable build ([`scripts/build-exe-for-python-sdk.ts`](../../../../scripts/build-exe-for-python-sdk.ts)), because the two share the same hoisted, symlink-free closure requirement.
+Stage 2 uses the same `pnpm deploy` invocation shape as the existing executable build ([`scripts/build-exe-for-python-sdk.ts`](../../../../scripts/build-exe-for-python-sdk.ts)), because the two share the same hoisted, symlink-free closure requirement. There is no stage between it and assembly for recompiling native addons, for the reason given in [`packaging.md`](packaging.md).
 
-Stage 8 is the gate that makes the pipeline meaningful. It installs the built application into a clean location on the runner and drives a full turn against it, so the checks exercise the artifact rather than the build tree.
+Stage 7 is the gate that makes the pipeline meaningful. It installs the built application into a clean location on the runner and drives a full turn against it, so the checks exercise the artifact rather than the build tree.
 
 ### Release artifacts
 

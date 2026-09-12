@@ -8,13 +8,15 @@ This document orders the work, states the exit criteria of each stage, and names
 
 The spike exists because three assumptions carry the whole design, and each is cheap to falsify but expensive to discover late. Its output is evidence recorded in this directory, not shippable code, and the spike code is discarded.
 
-| Assumption | How the spike tests it | If it fails |
+| Assumption | How the spike tests it | Result |
 |---|---|---|
-| Loader internals are reachable in an Electron child process | Launch the Electron binary with `ELECTRON_RUN_AS_NODE=1 --expose-internals`, require `internal/modules/esm/loader` through `createRequire`, and confirm `getOrInitializeCascadedLoader()` returns a loader | Fall back to the bundled official Node carrier, which is the documented alternative in [`architecture.md`](architecture.md) |
-| `node-pty` loads against Electron's ABI and finds its spawn helper | Rebuild the addon with the Electron rebuild tooling, load it in the same child, open a PTY, and run a command through it | Fall back to the bundled Node carrier, where the addon builds against stock Node as it does in CI today |
-| The frozen closure serves the interface | Materialize the closure with the deploy invocation, boot it from a directory, and load the interface in a browser at the reported port | Resolve before Stage 1; a closure that cannot serve the interface invalidates the composition rather than the carrier |
+| Loader internals are reachable in an Electron child process | Launch the Electron binary with `ELECTRON_RUN_AS_NODE=1 --expose-internals`, require `internal/modules/esm/loader` through `createRequire`, and confirm `getOrInitializeCascadedLoader()` returns a loader, with the same require without the flag as the control | **Confirmed.** The flag resolves the loader; the control fails with `MODULE_NOT_FOUND` |
+| The terminal addon loads under Electron | Load the repository's `node-pty` prebuild in the same child, open a PTY, and read a command's output back | **Confirmed, and simpler than expected.** The addon is N-API, so the stock-Node prebuild loads without recompilation and no rebuild stage exists |
+| The frozen closure serves the interface | Materialize the closure with the deploy invocation, boot it from a directory, and load the interface in a browser at the reported port | **Open.** A closure that cannot serve the interface invalidates the composition rather than the carrier, so this is resolved before Stage 1 |
 
-The spike also establishes the two version facts the rest of the work depends on: the Electron line ships a Node that satisfies the repository engine floor of `^22.19.0 || >=24.0.0`, and that Node exposes `node:zlib` zstd, which the default persistence backend imports eagerly.
+The spike also established the version facts the rest of the work depends on, recorded with the measurements in [`architecture.md`](architecture.md): Electron 44.3.0 ships Node 24.20.0, which satisfies the repository engine floor of `^22.19.0 || >=24.0.0`, and that Node exposes `node:zlib` zstd and `node:sqlite`.
+
+Two of the three assumptions resolved in the direction that removes work rather than adding it. Neither the Loader's native helper nor an addon rebuild is part of the artifact.
 
 **Exit criteria.** Each of the three assumptions is confirmed or refuted with a recorded command and its output, and the carrier selection in [`architecture.md`](architecture.md) is either confirmed or revised.
 

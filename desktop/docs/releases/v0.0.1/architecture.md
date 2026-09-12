@@ -26,15 +26,29 @@ The child process needs a Node runtime that satisfies the repository engine floo
 
 | Carrier | Satisfies the floor | Extra payload | Native-addon consequence |
 |---|---|---|---|
-| Electron's own Node, launched with `ELECTRON_RUN_AS_NODE=1` | Electron 39 ships Node 22.20 | None | `node-pty` must be rebuilt against Electron's ABI |
-| A bundled official Node binary | Chosen by the build | One Node runtime per architecture | `node-pty` builds against stock Node, as it does in CI today |
+| Electron's own Node, launched with `ELECTRON_RUN_AS_NODE=1` | Electron 44.3.0 ships Node 24.20.0 | None | None: the packaged addon is N-API and loads without a rebuild |
+| A bundled official Node binary | Chosen by the build | One Node runtime per architecture | The same N-API addon loads there too |
 | The `pkg --sea` single-file executable | Fixed at the node24 target | One executable carrying a VFS | `node-pty` is staged as a sibling, as the executable build already does |
 
 **Selection: Electron's own Node, with a bundled official Node binary as the fallback.**
 
-The selection is driven by two facts. First, Electron 39's bundled Node 22.20 satisfies the engine floor without shipping a second runtime, which keeps the application bundle roughly one Node runtime smaller than the alternatives. Second, the `node-pty` patch already anticipates this shape: [`patches/node-pty@1.1.0.patch`](../../../../patches/node-pty@1.1.0.patch) adds a `DSH_NODE_PTY_SPAWN_HELPER` environment variable and, absent it, probes `process.execPath + '-spawn-helper'`, which is the Electron binary path rather than a sibling of the addon.
+The selection is driven by two facts. First, Electron 44.3.0's bundled Node 24.20.0 satisfies the engine floor without shipping a second runtime, which keeps the application bundle roughly one Node runtime smaller than the alternatives. Second, the `node-pty` patch already anticipates this shape: [`patches/node-pty@1.1.0.patch`](../../../../patches/node-pty@1.1.0.patch) adds a `DSH_NODE_PTY_SPAWN_HELPER` environment variable and, absent it, probes `process.execPath + '-spawn-helper'`, which is the Electron binary path rather than a sibling of the addon.
 
 The carrier is isolated behind one module in the shell that produces an executable path and an argument vector. Switching carriers changes that module and the packaging rules, not the boot sequence or the composition.
+
+### The carrier, measured
+
+The spike ran the Electron binary as a Node child and recorded what follows. Each value is reproducible with `ELECTRON_RUN_AS_NODE=1` against the packaged binary.
+
+| Property | Measured |
+|---|---|
+| Electron | 44.3.0 |
+| Bundled Node | 24.20.0, which satisfies `^22.19.0 \|\| >=24.0.0` |
+| `node:zlib` `zstdCompress` | Present, so the default JSONL persistence backend imports cleanly |
+| `node:sqlite` | Available |
+| Native module version | 149 |
+
+The native module version is recorded because it is what an addon must match; the packaged addon turns out not to depend on it, for the reason below.
 
 ### Reaching Loader internals without a native addon
 
@@ -46,9 +60,15 @@ if (process.execArgv.includes('--expose-internals')) {
 }
 ```
 
-The child process is launched with `--expose-internals`, which removes `node-addon-require-builtin` from the packaged artifact entirely and leaves `node-pty` as the only ABI-bound addon. This is a Phase 0 verification item because it is the single assumption the whole arrangement rests on ([`risks.md`](risks.md)).
+The child process is launched with `--expose-internals`, which removes `node-addon-require-builtin` from the packaged artifact entirely. The spike confirmed both directions in an Electron child: with the flag, `internal/modules/esm/loader` resolves and `getOrInitializeCascadedLoader()` returns a loader; without it, the same require fails with `MODULE_NOT_FOUND`.
 
 `--expose-internals` is a stock Node flag and the harness already depends on internals by design, so this adds no new class of coupling. The harness's own README documents the dependency.
+
+### The terminal addon needs no rebuild
+
+`node-pty` builds against `node-addon-api`, so its prebuilt `pty.node` is an N-API addon rather than one bound to a module version. The spike loaded the prebuild shipped in the repository's dependency tree — the one built for stock Node — under the Electron child, opened a PTY, and read the command's output back, with no recompilation.
+
+This removes a build stage rather than deferring it: Electron's native module version never enters the picture for this addon, so the packaging step that other Electron applications spend on `electron-rebuild` has nothing to do here. The addon still must be unpacked outside `asar` and keep its executable helper, which are packaging constraints rather than ABI ones.
 
 ## Process model
 

@@ -52,21 +52,23 @@ Everything in this table must survive copy, keep its executable bit, and carry a
 
 | Artifact | Source | Reached how | Packaging consequence |
 |---|---|---|---|
-| `pty.node` | `node-pty`, rebuilt against Electron's ABI | Eager static import in `@deepseek-ai/dsh-subprocess-local` | Must be loadable before tree construction completes; ABI must match the Electron binary exactly |
-| `spawn-helper` | `node-pty` | Spawned by the addon when a PTY opens | Executable bit, signed, and locatable. The patched loader probes `process.execPath + '-spawn-helper'` first and honours `DSH_NODE_PTY_SPAWN_HELPER`, so the helper may sit beside the Electron binary instead of inside the addon directory |
+| `pty.node` | `node-pty`, an N-API addon | Eager static import in `@deepseek-ai/dsh-subprocess-local` | Must load before tree construction completes, which the shipped prebuild does without recompilation. It must still be unpacked outside `asar` |
+| `spawn-helper` | `node-pty` | Spawned by the addon when a PTY opens | Executable bit, signed, and locatable. The patched loader probes `process.execPath + '-spawn-helper'` first and honours `DSH_NODE_PTY_SPAWN_HELPER`, so the helper may sit beside the Electron binary instead of inside the addon directory. In the measured arrangement the addon's own directory supplies it and neither override is needed |
 | `rg` | `@vscode/ripgrep`, platform optional package | Lazily imported on first search tool call | Must be a real executable file outside `asar` |
 | `libvips` and its `sharp` addon | `sharp`, `@img/sharp-*` platform packages | Imported by `@deepseek-ai/dsh-attachment-local` | Native addon plus a dynamically loaded library; both signed |
 | `lib/worker.cjs` entries | `@deepseek-ai/dsh-workflow-worker-thread`, `@deepseek-ai/dsh-code-runtime-worker-thread` | `new Worker(fileURLToPath(...))` | Must remain a sibling CommonJS file next to its built host, and `import.meta.url` must survive packaging unchanged |
 
 Two artifacts from the general dependency set are absent on macOS and require no handling: `koffi` is imported only on Windows code paths, and `@deepseek-ai/node-addon-landlock-run` publishes Linux-only packages.
 
-`node-addon-require-builtin` is not packaged. The child process is launched with `--expose-internals`, which [`vendor/loader/src/internal.ts`](../../../../vendor/loader/src/internal.ts) checks before consulting that addon. Dropping it removes one native addon and one ABI dependency from the release.
+`node-addon-require-builtin` is not packaged. The child process is launched with `--expose-internals`, which [`vendor/loader/src/internal.ts`](../../../../vendor/loader/src/internal.ts) checks before consulting that addon. Dropping it removes one native addon from the release, and the spike confirmed the flag is sufficient on its own.
 
-### The node-pty rebuild
+### No addon rebuild stage
 
-`node-pty` is a `node-gyp` addon, so it must be compiled against the Electron binary's module version rather than a stock Node's. The build runs the addon rebuild as an explicit packaging stage and then verifies the result by loading it in the packaged child, because a mismatch surfaces at import time during boot rather than at install time.
+Every addon in the table above is either N-API or a spawned executable, so none of them is bound to the Electron binary's native module version. `node-pty` builds against `node-addon-api`, and the spike loaded the prebuild shipped in the repository's dependency tree — the one compiled for stock Node — inside an Electron child, opened a PTY, and read the command's output back.
 
-The helper's executable bit is restored by the package's own postinstall in the repository ([`packages/subprocess/subprocess-local`](../../../../packages/subprocess/subprocess-local/package.json)), but `pnpm deploy` does not run it, so the packaging stage restores the bit after copying. The executable build's build script performs the equivalent step for the same reason.
+The consequence is that this release has no rebuild stage. An Electron application's packaging normally spends one on recompiling native addons against the Electron headers; here there is nothing to recompile, and a build that skipped the stage would produce the same artifact.
+
+What remains is copy-time work. `pnpm deploy` does not run the dependency's postinstall, and that postinstall is what restores the executable bit on the macOS `spawn-helper` ([`packages/subprocess/subprocess-local`](../../../../packages/subprocess/subprocess-local/package.json)), so the packaging step restores the bit after copying. The executable build's build script performs the equivalent step for the same reason.
 
 ## Signing
 

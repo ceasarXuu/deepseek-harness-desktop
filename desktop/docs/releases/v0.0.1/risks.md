@@ -15,10 +15,10 @@ The design rests on harness facts that were read from source and on packaging fa
 | The profile launcher installs a process-exiting handler and forces an HMR mount | Verified by reading source | [`apps/cli/src/profile-boot.ts`](../../../../apps/cli/src/profile-boot.ts) and [`vendor/hmr/src/index.ts`](../../../../vendor/hmr/src/index.ts) |
 | `node-pty` is imported eagerly and must load at boot | Verified by reading source | [`packages/subprocess/subprocess-local/src/index.ts`](../../../../packages/subprocess/subprocess-local/src/index.ts) |
 | The persistence backend eagerly imports `node:zlib` zstd | Verified by reading source | [`packages/session/session-persistence-jsonl/src/zstd.ts`](../../../../packages/session/session-persistence-jsonl/src/zstd.ts) |
-| `node-addon-require-builtin` is avoidable | **Unverified in Electron** | The code path is verified; that Electron's Node satisfies it is a Stage 0 item |
-| `node-pty` loads against Electron's ABI with the helper path the patch probes | **Unverified** | The patch is written for this shape; no Electron build has been exercised |
-| The frozen closure serves the interface | **Unverified** | Composed of verified facts about path resolution, but the combination is a Stage 0 item |
-| Electron 39's Node 22.20 satisfies the engine floor | Verified from release notes, not from a running build | Confirmed against the published Electron release, to be re-confirmed from `process.versions` in the spike |
+| `node-addon-require-builtin` is avoidable | **Verified on a running Electron child** | With `--expose-internals`, `internal/modules/esm/loader` resolves and `getOrInitializeCascadedLoader()` returns a loader; without it the same require fails with `MODULE_NOT_FOUND` |
+| The terminal addon loads under Electron | **Verified on a running Electron child** | The repository's `node-pty` prebuild — compiled for stock Node — loaded, opened a PTY, and returned the command's output, because the addon is N-API |
+| Electron's bundled Node satisfies the engine floor | **Verified from a running Electron child** | Electron 44.3.0 reports Node 24.20.0, with `node:zlib` zstd and `node:sqlite` both present |
+| The frozen closure serves the interface | **Unverified** | Composed of verified facts about path resolution, but the combination is the remaining Stage 0 item |
 
 ## Risk register
 
@@ -26,8 +26,6 @@ Likelihood and impact are recorded so the ordering of mitigation is deliberate r
 
 | Risk | Likelihood | Impact | Mitigation or fallback |
 |---|---|---|---|
-| `--expose-internals` does not reach Node internals in an Electron child process | Medium | High — blocks the selected carrier | Stage 0 tests it first. Fallback: the bundled official Node carrier, which is a shipping decision, not a redesign |
-| `node-pty` cannot be rebuilt against Electron's ABI | Low | High — blocks boot, not just PTY features | Stage 0 tests it. Fallback: the bundled Node carrier, where it builds against stock Node as it does in CI today |
 | The frozen closure fails to serve the interface | Low | High — invalidates the composition | Stage 0 tests it. This is the only failure whose repair touches the composition rather than the carrier |
 | A nested binary is rejected by notarization | Medium | Medium — blocks publication until the offending file is fixed | Notarization reports the offending file and reason, so the repair is localized to one artifact's signing or entitlements. A release candidate is notarized before the release is tagged, so the round trip happens off the critical path |
 | The signing certificate is replaced with one from another team | Low | High — installed applications stop accepting updates | The team identifier is recorded in [`packaging.md`](packaging.md) and the updater compares it. Renewal keeps the same team, which is why the expiry below is a deadline rather than a migration |

@@ -440,13 +440,12 @@ importers:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:^
         version: link:../../../packages/boot/app-boot
-      '@deepseek-ai/dsh-cmdline':
-        specifier: workspace:^
-        version: link:../../../packages/boot/cmdline
-    devDependencies:
       '@deepseek-ai/dsh-base':
         specifier: workspace:^
         version: link:../../../packages/bundle/base
+      '@deepseek-ai/dsh-cmdline':
+        specifier: workspace:^
+        version: link:../../../packages/boot/cmdline
       '@deepseek-ai/dsh-web-app':
         specifier: workspace:^
         version: link:../../../packages/bundle/web-app

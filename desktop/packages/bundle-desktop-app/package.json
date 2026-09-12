@@ -41,9 +41,5 @@
   "peerDependencies": {
     "@deepseek-ai/dsh-base": "workspace:^",
     "@deepseek-ai/dsh-web-app": "workspace:^"
-  },
-  "devDependencies": {
-    "@deepseek-ai/dsh-base": "workspace:^",
-    "@deepseek-ai/dsh-web-app": "workspace:^"
   }
 }

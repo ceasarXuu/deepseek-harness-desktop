@@ -11,10 +11,10 @@ The harness itself lives in [`packages/`](../packages/README.md) and [`apps/cli`
 | Path | Responsibility |
 |---|---|
 | [`docs/releases/`](docs/releases/README.md) | Per-release planning: scope, architecture, packaging, distribution, and risks for one shipped desktop version |
-| `apps/shell/` | The Electron application: main process, preload, window lifecycle, runtime supervision, native dialogs, updater |
-| `packages/bundle-desktop-app/` | The Cordis bundle the shell boots: the patch layer over `@deepseek-ai/dsh-base` plus the desktop runtime glue |
-| `packages/runtime-closure/` | The dependency-only deploy root whose closure is what the packaged application ships |
-| `build/` | electron-builder configuration, entitlements, signing and notarization scripts |
+| `apps/shell/` | The Electron application: main process, preload, window lifecycle, harness supervision, native dialogs, updater |
+| `packages/bundle-desktop-app/` | The Cordis bundle the composition boots: the patch layer over `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`, the desktop runtime glue, and the packaged entry |
+| `runtime-closure/` | The dependency-only deploy root whose closure is what the packaged application ships. A workspace member for dependency resolution only, like `python/sdk-runtime` |
+| `build/` | The closure build script, entitlements, staged icon sources, and the generated `.icns` |
 
 ## Relationship to the harness
 

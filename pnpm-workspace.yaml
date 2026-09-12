@@ -16,6 +16,13 @@ packages:
   # globs (vendor/*, packages/*/*) exclude them. See examples/AGENTS.md and the archived
   # run-ci-examples-from-built-lib Agent Note.
   - examples
+  # Desktop distribution: the Electron shell and the harness-side packages the
+  # packaged closure is built from. See desktop/README.md. The closure manifest
+  # is a member for dependency resolution only, like python/sdk-runtime: it has
+  # no source, so tsdown's package globs must not reach it.
+  - desktop/packages/*
+  - desktop/apps/*
+  - desktop/runtime-closure
   # Deploy root of the single-exe build: a pure dependency manifest whose
   # closure is what the exe bundles and what the Python runtime distributes.
   - python/sdk-runtime
@@ -40,6 +47,11 @@ peerDependencyRules:
 allowBuilds:
   esbuild: true
   lefthook: true
+  # The desktop shell's Electron runtime; its postinstall downloads the
+  # platform binary the shell is packaged around.
+  electron: true
+  # electron-builder's own install step prepares its bundled app-builder binary.
+  electron-builder: true
   # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.
   node-pty: true
   # Pulled in by @earendil-works/pi-ai (optional LLM API backend). pnpm lists
@@ -53,6 +65,9 @@ allowBuilds:
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true
+  # Windows-installer tooling reached through electron-builder. This distribution
+  # targets macOS, so its script is denied rather than reviewed.
+  electron-winstaller: false
 
 minimumReleaseAgeExclude:
   # Fresh pi-ai releases carry the model catalog updates that are the whole

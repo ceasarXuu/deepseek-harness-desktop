@@ -87,6 +87,7 @@
     "examples/*/start.ts",
     "examples/*/tests/**/*.ts",
     "packages/*/*/tests/**/*.ts",
+    "desktop/packages/*/tests/**/*.ts",
     "scripts/**/*.ts",
     "website/**/*.ts",
     "website/.vitepress/**/*.ts"
@@ -107,6 +108,7 @@
     "scripts/client-bundle-purity.spec.ts"
   ],
   "references": [
+    { "path": "./desktop/packages/bundle-desktop-app" },
     { "path": "./vendor/cosmokit" },
     { "path": "./vendor/schemastery" },
     { "path": "./vendor/cordis" },

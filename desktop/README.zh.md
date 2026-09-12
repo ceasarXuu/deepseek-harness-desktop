@@ -11,10 +11,10 @@ harness 本身位于 [`packages/`](../packages/README.md) 与 [`apps/cli`](../ap
 | 路径 | 职责 |
 |---|---|
 | [`docs/releases/`](docs/releases/README.md) | 按版本规划：某个已发布桌面版本的范围、架构、打包、分发与风险 |
-| `apps/shell/` | Electron 应用：主进程、preload、窗口生命周期、运行时监管、原生对话框、更新器 |
-| `packages/bundle-desktop-app/` | 该应用启动的 Cordis 组合包：`@deepseek-ai/dsh-base` 之上的补丁层，加上桌面运行时粘合层 |
-| `packages/runtime-closure/` | 纯依赖的部署根目录，其闭包即打包应用实际交付的内容 |
-| `build/` | electron-builder 配置、entitlements、签名与公证脚本 |
+| `apps/shell/` | Electron 应用：主进程、preload、窗口生命周期、harness 监管、原生对话框、更新器 |
+| `packages/bundle-desktop-app/` | 组合启动的 Cordis 组合包：`@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之上的补丁层、桌面运行时粘合层，以及打包入口 |
+| `runtime-closure/` | 纯依赖的部署根目录，其闭包即打包应用实际交付的内容。与 `python/sdk-runtime` 一样，仅为依赖解析而加入工作区 |
+| `build/` | 闭包构建脚本、entitlements、图标源文件与生成的 `.icns` |
 
 ## 与 harness 的关系
 

@@ -1,0 +1,51 @@
+# electron-builder configuration for the desktop application.
+#
+# The harness closure ships as an extra resource rather than inside `app.asar`:
+# it is executed as a real package tree by a real Node process, and archive
+# semantics would put every one of its resolution steps — ESM import of a bare
+# specifier, `createRequire(...).resolve()`, `readFile` of a client bundle,
+# `fileURLToPath` of a worker entry, spawning a native addon helper — behind a
+# virtual filesystem. See desktop/docs/releases/v0.0.1/packaging.md.
+appId: com.xuyutech.dsh.desktop
+productName: DeepSeek Harness
+copyright: Copyright © 2026 Xu Zhang
+
+directories:
+  output: dist
+
+files:
+  - lib/**/*
+  - package.json
+
+extraResources:
+  - from: ../../build/out/closure
+    to: harness
+
+mac:
+  category: public.app-category.developer-tools
+  icon: ../../build/icons/icon.icns
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: ../../build/entitlements.mac.plist
+  entitlementsInherit: ../../build/entitlements.mac.plist
+  # The application is not sandboxed: the agent executes shell commands in the
+  # user's workspace and spawns language processes, which a sandboxed
+  # application cannot do. Distribution is therefore a notarized DMG rather than
+  # the Mac App Store, which requires the sandbox entitlement.
+  notarize: true
+
+dmg:
+  title: DeepSeek Harness ${version}
+  contents:
+    - x: 140
+      y: 200
+      type: file
+    - x: 400
+      y: 200
+      type: link
+      path: /Applications

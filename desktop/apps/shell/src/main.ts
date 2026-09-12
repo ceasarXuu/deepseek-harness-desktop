@@ -226,7 +226,13 @@ function createWindow(): BrowserWindow {
     minWidth: 640,
     minHeight: 480,
     show: false,
-    titleBarStyle: 'hiddenInset',
+    // A normal title bar, not `hiddenInset`. Hiding the title bar removes the
+    // only surface macOS gives the window to drag by, and the interface is the
+    // shipped browser client, which declares no `-webkit-app-region: drag` —
+    // it was built for a browser, where there is no window chrome to replace.
+    // An inset bar would also overlay its traffic lights on the interface's own
+    // top-left corner.
+    titleBarStyle: 'default',
     webPreferences: {
       preload: join(import.meta.dirname, 'preload.cjs'),
       contextIsolation: true,

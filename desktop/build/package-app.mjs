@@ -16,7 +16,7 @@
  * Usage: node desktop/build/package-app.mjs [--skip-closure] [--arch arm64]
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -27,6 +27,11 @@ const closureArchive = join(outputDir, 'harness.asar')
 const skipClosure = process.argv.includes('--skip-closure')
 const archIndex = process.argv.indexOf('--arch')
 const arch = archIndex === -1 ? 'arm64' : (process.argv[archIndex + 1] ?? 'arm64')
+
+/** The shell's version, which electron-builder also uses to name its artifacts. */
+function version() {
+  return JSON.parse(readFileSync(join(shellDir, 'package.json'), 'utf8')).version
+}
 
 // `pnpm deploy` perturbs the workspace's install state, and every later `pnpm run`
 // then meets a deps-status check that wants to purge node_modules. pnpm refuses
@@ -65,6 +70,22 @@ run('pnpm', [
   '--mac', `--${arch}`,
   `--config.mac.notarize=${String(notarize)}`,
 ], repo)
+
+// Only the deliverable survives a build. electron-builder stages the assembled
+// application under `dist/mac-arm64` and produces the DMG and ZIP from it; that
+// staging is half the output size and is exactly reproducible, so leaving it
+// behind means every build permanently costs its own copy of the application.
+// The removal happens after the artifacts exist, so a failed build keeps its
+// evidence.
+const staging = join(shellDir, 'dist', `mac-${arch}`)
+const artifacts = [`DeepSeek Harness-${version()}-${arch}.dmg`, `DeepSeek Harness-${version()}-${arch}-mac.zip`]
+  .map(name => join(shellDir, 'dist', name))
+if (artifacts.every(path => existsSync(path))) {
+  rmSync(staging, { recursive: true, force: true })
+} else {
+  console.error('package-app: artifacts are missing; keeping the staged application for diagnosis')
+  process.exit(1)
+}
 
 console.log(`package-app: notarization ${notarize ? 'enabled' : 'skipped (DSH_DESKTOP_NOTARIZE=1 to enable)'}`)
 console.log(`package-app: artifacts in ${join(shellDir, 'dist')}`)

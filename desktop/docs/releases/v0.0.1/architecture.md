@@ -128,12 +128,25 @@ The desktop application composes `@deepseek-ai/dsh-base` plus a new bundle that 
 | `client-hmr` | web-app equivalent | Not mounted. The client rebuild watcher has no purpose without a watch process. |
 | `webserver` | base | `host: '127.0.0.1'`, `port: 0`. |
 | `session-query-sqlite` | base | Kept inert at `openAt: never`, as the base and web compositions ship it. Enabling full-text session search is out of scope for this version. |
-| `agent-presets` | base | The shipped preset root is injected as a build-time path rather than a URL relative to a launcher. |
+| `agent-presets` | web-app equivalent | The shipped roster's root is resolved by the entry, which is the launcher here. |
 | URL line | web-app | Disabled; replaced by the structured readiness record. |
 | Directory picker | web-app | An Electron-backed provider replaces the host-native provider. |
 | `session-persistence-jsonl` | base | Root redirected under the application's `DSH_HOME`. |
 
 The bundle declares `dsh.bundle.patch` in its `package.json` and is resolved through the same `resolveBundleDir` probe path used by shipped bundles, so it is packaged and verified by the existing configuration checks rather than by desktop-specific tooling.
+
+### Roots a launcher normally supplies
+
+A bundle states a composition, but two of its rows need a fact about the installation rather than about the composition, so neither bundle can fill them in. `apps/cli` fills both in `composeProfile`, by appending one overlay per row; the packaged entry is the launcher for this application, so it appends the same two.
+
+| Row | What the overlay supplies | Why the bundle cannot |
+|---|---|---|
+| `agent-presets` | `roots: [{ path: <shipped roster>, trust: 'system' }]` | The roster ships beside an application's own config, so only the application knows where it is |
+| `session-telemetry-otel` | `disabled: true` when `DSH_TELEMETRY_DISABLED` is set | The switch is an environment fact, and the environment is inherited rather than owned |
+
+Omitting the first is not a degraded composition but a broken one. `session.create` carries a workspace and reaches an agent by resolving the default preset, so an empty roster rejects every attempt to open a session — and the client rolls the optimistic selection back and reports nothing, which is a workspace picker that closes without selecting. This is why the entry asserts the roster's presence rather than accepting an empty one.
+
+The roster is not copied into this bundle. The desktop closure declares `@deepseek-ai/dsh` as a direct dependency and that package ships `config/agent-presets/`, so the entry resolves it through the same sibling path the bundle patches use. A second copy would be a second thing to keep in step, and the entry fails loud rather than booting with a roster that resolves to a directory nothing wrote.
 
 Two rows require new code rather than configuration.
 

@@ -11,8 +11,9 @@
  * @module @deepseek-ai/dsh-desktop-app/entry
  */
 
+import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { boot, installFailLoud, loadEnv, loadOptionalPatches } from '@deepseek-ai/dsh-app-boot'
+import { boot, composeEntries, installFailLoud, loadEnv, loadOptionalPatches } from '@deepseek-ai/dsh-app-boot'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 
@@ -28,6 +29,76 @@ const BUNDLES = ['dsh-base', 'dsh-web-app', 'dsh-desktop-app'] as const
 
 /** Where the shipped root configuration sits, relative to the built entry. */
 const CONFIG_RELATIVE_PATH = '../config/cordis.yml'
+
+/**
+ * The shipped agent-preset roster, relative to the built entry.
+ *
+ * A preset IS a session's agent composition, so a composition that reaches
+ * `session.create` with an empty roster cannot open a session at all: the
+ * request carries only a workspace, and resolving the default preset is what
+ * turns it into an agent.
+ *
+ * Every launcher resolves this root for the same reason, and none of them
+ * restates the roster: `apps/cli` reads it beside its own config, and this
+ * entry reads it from the package that ships it in the closure. The desktop
+ * closure declares `@deepseek-ai/dsh` as a direct dependency, so the roster
+ * arrives with the closure rather than being copied into a second place that
+ * would drift from the first.
+ */
+const SHIPPED_PRESET_ROOT_RELATIVE = '../../dsh/config/agent-presets/'
+
+/** The telemetry row id the `DSH_TELEMETRY_DISABLED` switch targets, as the launcher spells it. */
+const TELEMETRY_ROW_ID = 'session-telemetry-otel'
+
+/**
+ * Locate the shipped agent-preset roster and fail loud when it is absent.
+ *
+ * Silence here is the failure mode: an empty roster rejects every
+ * `session.create` with `agent-preset-not-found`, which surfaces in the client
+ * as a workspace picker that closes without selecting anything.
+ * @param entryUrl - this module's URL, the resolution anchor.
+ * @returns the absolute roster path.
+ */
+function shippedPresetRoot(entryUrl: string): string {
+  const path = fileURLToPath(new URL(SHIPPED_PRESET_ROOT_RELATIVE, entryUrl))
+  if (!existsSync(path)) {
+    throw new Error(`${NAME}: shipped agent-preset roster not found at ${path}`)
+  }
+  return path
+}
+
+/**
+ * The overlays this entry adds over the composed bundle layers.
+ *
+ * Both exist because a launcher normally adds them and this entry is the
+ * launcher. They are appended after the layers so they win, and each replaces
+ * the whole `config` of the row it targets — hence the composed row is read
+ * first and its keys restated rather than dropped.
+ * @param patches - the composed bundle layers, in application order.
+ * @param entryUrl - this module's URL, the resolution anchor.
+ * @returns the overlay list, possibly empty.
+ */
+function launcherOverlays(patches: readonly PatchOptions[], entryUrl: string): PatchOptions[] {
+  const rows = new Map<string, ReturnType<typeof composeEntries>[number]>()
+  for (const row of composeEntries([[...patches]])) {
+    if (typeof row.id === 'string') rows.set(row.id, row)
+  }
+  const overlays: PatchOptions[] = []
+  const presetRow = rows.get('agent-presets')
+  if (presetRow !== undefined) {
+    overlays.push({
+      id: 'agent-presets',
+      config: { ...presetRow.config, roots: [{ path: shippedPresetRoot(entryUrl), trust: 'system' }] },
+    })
+  }
+  // The environment is inherited rather than owned: a `DSH_TELEMETRY_MODE` set
+  // for another tool would otherwise re-enable collection in a process whose
+  // own switch says it is off.
+  if ((process.env['DSH_TELEMETRY_DISABLED'] ?? '') !== '' && rows.has(TELEMETRY_ROW_ID)) {
+    overlays.push({ id: TELEMETRY_ROW_ID, disabled: true })
+  }
+  return overlays
+}
 
 /**
  * Read one bundle's patch layer from the closure the entry runs inside.
@@ -56,7 +127,8 @@ export async function runDesktopHarness(entryUrl: string): Promise<void> {
   installFailLoud(NAME)
   loadEnv(NAME)
 
-  const patches = BUNDLES.flatMap(bundle => loadBundlePatch(entryUrl, bundle))
+  const layers = BUNDLES.flatMap(bundle => loadBundlePatch(entryUrl, bundle))
+  const patches = [...layers, ...launcherOverlays(layers, entryUrl)]
   const configPath = fileURLToPath(new URL(CONFIG_RELATIVE_PATH, entryUrl))
 
   const ctx = await boot(NAME, configPath, patches, (hostCtx) => {

@@ -416,6 +416,9 @@ importers:
 
   desktop/apps/shell:
     devDependencies:
+      '@electron/asar':
+        specifier: ^3.4.1
+        version: 3.4.1
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.0

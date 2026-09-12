@@ -108,7 +108,7 @@ The snapshot requirement is satisfied at the composition level rather than by au
 | Release origin | This repository, `ceasarXuu/deepseek-harness-desktop`, which is public. It is a long-lived fork that never contributes upstream, so releases are published here rather than to the upstream release train |
 | Where the shell and the new packages live | A workspace member of this repository, under `desktop/`, in keeping with the repository's monorepo shape |
 | Distribution channel | Direct distribution as a signed DMG. The Mac App Store is not a target, which is consistent with the application not being sandboxed |
-| Bundle identifier | `xuyutech.dsh`, recorded with its consequences in [`packaging.md`](packaging.md) |
+| Bundle identifier | `com.xuyutech.dsh.desktop`, recorded with its consequences in [`packaging.md`](packaging.md) |
 | Signing certificate | `Developer ID Application: Xu Zhang (3BCJ5SAVU2)`, present in the build machine's login keychain |
 | Minimum macOS version | Not a decision. It follows from the selected Electron line and is measured and recorded rather than chosen |
 
@@ -120,7 +120,6 @@ No decision blocks the start of work. The items below are deferred to the stage 
 
 | Decision | Needed by | Options |
 |---|---|---|
-| Exporting the signing certificate for CI | Stage 3 | Keychain Access exports one selected identity; `security export -t identities` writes every identity in the keychain, including the App Store distribution certificates, into one archive |
 | Whether the minimum macOS version is acceptable | Stage 3 | Depends on the measured value. A lower floor would mean choosing an older Electron line at the cost of an older Chromium |
 
-The release environment `desktop-release` is configured: it restricts deployments to tags matching `desktop-v*` and requires a reviewer before a deployment proceeds. The notarization credential is validated against the notary service and stored under the keychain profile `dsh-notarization`; [`packaging.md`](packaging.md) records the values and what each CI secret receives.
+The release environment `desktop-release` is configured: it restricts deployments to tags matching `desktop-v*`, requires a reviewer before a deployment proceeds, and holds the five signing and notarization secrets. The notarization credential is validated against the notary service and stored under the keychain profile `dsh-notarization`; [`packaging.md`](packaging.md) records the values and what each secret receives.

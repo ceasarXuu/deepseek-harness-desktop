@@ -40,11 +40,11 @@ The packaged child passes the closure directory as `bareModuleBaseUrl`, so bare 
 
 | Value | Setting | Notes |
 |---|---|---|
-| Bundle identifier | `xuyutech.dsh` | Set as `CFBundleIdentifier` in `Info.plist` and as `appId` in the packaging configuration. Must match on every release: the updater compares it, and a change would present updates as a different application |
+| Bundle identifier | `com.xuyutech.dsh.desktop` | Set as `CFBundleIdentifier` in `Info.plist` and as `appId` in the packaging configuration. Must match on every release: the updater compares it, and a change would present updates as a different application |
 | Application name | `DeepSeek Harness` | `CFBundleName` and the display name |
 | Team identifier | `3BCJ5SAVU2` | Implied by the signing certificate. The updater verifies that a downloaded update carries the same team, so the certificate must not be replaced with one from another team |
 
-The bundle identifier is deliberately not a reverse-DNS name under `ai.deepseek`. This is a third-party distribution, and the identifier states who publishes the application rather than who authored the harness it carries.
+The bundle identifier sits under the publisher's own domain rather than `ai.deepseek`. This is a third-party distribution, and the identifier states who publishes the application rather than who authored the harness it carries. It follows the `com.xuyutech.<product>.<surface>` form the publisher's other desktop applications already use, so a machine holding more than one of them resolves each consistently.
 
 ## Native artifacts
 
@@ -108,27 +108,39 @@ Notarization is submitted with `notarytool` and the result is stapled to the `.a
 
 Developer ID signing and notarization both require the paid Apple Developer Program membership. A free Apple ID issues development certificates that sign only for registered devices and cannot distribute or notarize.
 
-The Developer ID Application certificate is installed on the build machine, so local builds can sign immediately, and the notarization credential is validated against the notary service. What remains is moving both into CI.
+The Developer ID Application certificate is installed on the build machine, and both the signing identity and the notarization credential are in the release environment's secrets, so neither a local build nor the pipeline is blocked on account setup.
 
 | Item | Where it comes from | Secret | State |
 |---|---|---|---|
-| Developer ID Application certificate | Certificates, Identifiers and Profiles, exported as a password-protected `.p12` | `CSC_LINK`, `CSC_KEY_PASSWORD` | In the build machine's login keychain. The export for CI remains |
-| App Store Connect API key: the `.p8` file | Users and Access, Integrations | `APPLE_API_KEY` | Held by the build machine. Validated against the notary service |
+| Developer ID Application certificate | Certificates, Identifiers and Profiles, exported as a password-protected `.p12` | `CSC_LINK`, `CSC_KEY_PASSWORD` | In the build machine's login keychain and in the release environment |
+| App Store Connect API key: the `.p8` file | Users and Access, Integrations | `APPLE_API_KEY` | Validated against the notary service, and in the release environment |
 | The key's key identifier | The same page | `APPLE_API_KEY_ID` | `3DG45FCXBV` |
-| The key's issuer identifier | The same page | `APPLE_API_ISSUER` | Recorded with the key. Team-scoped and displayed on the integration page; held with the key rather than in this repository |
+| The key's issuer identifier | The same page | `APPLE_API_ISSUER` | Team-scoped and displayed on the integration page; held with the key rather than in this repository |
 | Team identifier | Membership | Not secret, recorded with each release | `3BCJ5SAVU2` |
 
 An App Store Connect API key is preferred over an Apple ID with an app-specific password because the key is scoped, revocable, and does not depend on a person's account credentials. Either satisfies `notarytool`.
 
-The key is a **Team Key**, so it requires the issuer identifier: `notarytool` rejects a team key without one and accepts an individual key only when none is supplied. The local credential is stored under the keychain profile `dsh-notarization`, which is what a build command passes to `--keychain-profile`.
-
-Verification is a submission-history query rather than the presence of a keychain item, because `store-credentials` reports success for a profile that was never validated against Apple:
+The key is a **Team Key**, so it requires the issuer identifier: `notarytool` rejects a team key without one and accepts an individual key only when none is supplied. The local credential is stored under the keychain profile `dsh-notarization`, which is what a build command passes to `--keychain-profile`. `store-credentials` reports success for a profile it never validated against Apple, so the credential is confirmed by a submission-history query instead:
 
 ```
 xcrun notarytool history --keychain-profile dsh-notarization
 ```
 
-Exporting the certificate is the one step that cannot be done safely from the command line. `security export -t identities` writes every identity in the keychain into one archive, which for this machine means the App Store distribution certificates and their private keys travel with the Developer ID one for no benefit. Keychain Access exports a single selected identity and is what the CI secret should be built from.
+### Exporting one identity
+
+`security export -t identities` writes **every** identity in the keychain into one archive — five on this machine, including the App Store distribution certificates and their private keys. Shipping that archive to a CI secret would carry capabilities the release never uses, so the archive is filtered to the one identity the release needs.
+
+The filter matches each leaf certificate to the private key that shares its public key, which is the only property that identifies a pair; a certificate's subject cannot be used because the private key carries no subject. The result is self-contained: the export omits Apple's intermediates, which live in the system keychain, so the Developer ID Certification Authority and Apple Root CA certificates are read from there and carried into the output.
+
+Verification is a real signing operation rather than a listing, because a listing reports an identity that cannot sign:
+
+```
+security import <filtered>.p12 -k <temp keychain> -P <password>
+codesign --sign <identity hash> --keychain <temp keychain> --timestamp --options runtime <copy of a system binary>
+codesign --verify --verbose=2 <signed copy>
+```
+
+The signed result names the full chain and reports the timestamp Apple issued, which together establish that the identity is complete, that its intermediates are present, and that the certificate is neither expired nor revoked.
 
 The certificate is team-scoped and valid for years, but it is the single artifact that makes every published release verifiable and updatable, so its expiry is tracked rather than rediscovered during a release.
 

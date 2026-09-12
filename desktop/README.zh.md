@@ -71,12 +71,12 @@ harness 本身位于 [`packages/`](../packages/README.md) 与 [`apps/cli`](../ap
 
 三档成本，对应三类改动。
 
-**直接从源码树运行。** 外壳从 `DSH_DESKTOP_CLOSURE` 读取闭包目录，因此改动外壳或桌面组合包完全不需要打包：
+**直接从源码树运行。** 外壳从 `DSH_DESKTOP_CLOSURE` 读取运行时位置，因此改动外壳或桌面组合包完全不需要打包。该值就是存放 `harness.asar` 的目录，即打包应用 `Resources` 里的内容：
 
 ```sh
 pnpm --filter @deepseek-ai/dsh-desktop-app run build
 pnpm --filter @deepseek-ai/dsh-desktop-shell run build
-DSH_DESKTOP_CLOSURE="$PWD/desktop/build/out/closure" \
+DSH_DESKTOP_CLOSURE="$PWD/desktop/build/out" \
   ./desktop/apps/shell/node_modules/.bin/electron desktop/apps/shell
 ```
 

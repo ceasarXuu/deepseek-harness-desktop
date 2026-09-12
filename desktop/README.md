@@ -71,12 +71,12 @@ The remedy is to place a JavaScript pnpm at the pinned version ahead of the bina
 
 Three levels of cost, for three kinds of change.
 
-**Run from the source tree.** The shell reads the closure directory from `DSH_DESKTOP_CLOSURE`, so changes to the shell or to the desktop bundle need no packaging at all:
+**Run from the source tree.** The shell reads its runtime location from `DSH_DESKTOP_CLOSURE`, so changes to the shell or to the desktop bundle need no packaging at all. The value is the directory holding `harness.asar`, which is what a packaged application has in its `Resources`:
 
 ```sh
 pnpm --filter @deepseek-ai/dsh-desktop-app run build
 pnpm --filter @deepseek-ai/dsh-desktop-shell run build
-DSH_DESKTOP_CLOSURE="$PWD/desktop/build/out/closure" \
+DSH_DESKTOP_CLOSURE="$PWD/desktop/build/out" \
   ./desktop/apps/shell/node_modules/.bin/electron desktop/apps/shell
 ```
 

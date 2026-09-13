@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { BrowserWindow, Menu, app, dialog, ipcMain } from 'electron'
-import { CLOSURE_ARCHIVE, ensureClosure } from './closure.js'
+import { CLOSURE_ARCHIVE, ensureClosure, type ClosureProgress } from './closure.js'
 
 /** Prefix of the child's readiness record; the rest of the line is its JSON payload. */
 const READY_PREFIX = 'dsh-desktop-ready '
@@ -97,7 +97,7 @@ function closurePlan(): { configured?: string; version: string; archive: string;
  * @param onProgress - reports extraction steps to a window that is already up.
  * @returns the absolute path of the closure directory.
  */
-async function resolveClosure(onProgress: (message: string) => void): Promise<string> {
+async function resolveClosure(onProgress: (message: string, progress?: ClosureProgress) => void): Promise<string> {
   const plan = closurePlan()
   if (plan.configured !== undefined) return plan.configured
   return await ensureClosure({
@@ -241,30 +241,50 @@ async function stopHarness(): Promise<void> {
 }
 
 /**
- * The page the window shows while the closure expands on first launch.
+ * The overlay the window shows while the closure expands.
  *
  * Expansion writes seventeen thousand files, and hiding the window until it
  * finishes would look like a launch that failed. It happens once per shipped
- * closure, so this is the whole of the first-run experience.
- * @returns a data URL holding the page.
+ * closure — on first launch and after an update — so this is the whole of the
+ * first-run experience, and it reports how far along it is rather than
+ * spinning: the application knows the entry count, so it can say so.
+ * @returns a data URL holding the overlay.
  */
 function preparingPage(): string {
   const html = `<!doctype html>
 <meta charset="utf-8">
 <title>DeepSeek Harness</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { margin: 0; height: 100vh; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center;
-         font: 13px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; color: #6b6b6b; background: #fafafa; }
-  @media (prefers-color-scheme: dark) { body { color: #9a9a9a; background: #1e1e1e; } }
-  .spinner { width: 22px; height: 22px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%;
-             animation: spin 0.9s linear infinite; opacity: 0.6; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  p { margin: 0; }
+  :root { color-scheme: light dark; --fg: #1f1f1f; --muted: #6b6b6b; --line: #e0e0e0; --track: #ececec; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e8e8; --muted: #9a9a9a; --line: #333; --track: #2c2c2c; } }
+  body { margin: 0; height: 100vh; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center;
+         font: 13px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; color: var(--fg); background: transparent; }
+  .title { font-size: 15px; font-weight: 600; }
+  .muted { color: var(--muted); }
+  .en { font-size: 12px; }
+  .bar { width: 260px; height: 3px; margin-top: 8px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--fg); opacity: 0.55; transition: width 160ms linear; }
+  .count { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
+  /* Before the first count arrives there is nothing to report, so the bar breathes. */
+  .bar.pending .fill { width: 35%; animation: sweep 1.4s ease-in-out infinite; }
+  @keyframes sweep { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
 </style>
-<div class="spinner"></div>
-<p>Preparing the runtime…</p>
-<p>This happens once after an install or an update.</p>`
+<div class="title">环境准备中…</div>
+<p class="muted">首次启动或更新后需要展开运行时，只需一次。</p>
+<p class="muted en">Preparing the environment — this happens once after an install or an update.</p>
+<div class="bar pending" id="bar"><div class="fill" id="fill"></div></div>
+<p class="count" id="count"></p>
+<script>
+  window.dshProgress = (done, total) => {
+    const bar = document.getElementById('bar')
+    const fill = document.getElementById('fill')
+    const count = document.getElementById('count')
+    const ratio = total > 0 ? Math.min(1, done / total) : 0
+    bar.classList.remove('pending')
+    fill.style.width = (ratio * 100).toFixed(1) + '%'
+    count.textContent = done.toLocaleString() + ' / ' + total.toLocaleString()
+  }
+</script>`
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
 }
 
@@ -390,11 +410,16 @@ if (!primary) {
       // expansion on first launch, or the re-expansion that follows a tree that
       // failed its integrity check. A plain start shows nothing extra.
       let preparing = false
-      closure = await resolveClosure((message) => {
-        record('stdout', message)
-        if (preparing) return
-        preparing = true
-        void created.loadURL(preparingPage())
+      closure = await resolveClosure((message, progress) => {
+        record('stdout', progress === undefined ? message : `${message} (${String(progress.done)}/${String(progress.total)})`)
+        if (!preparing) {
+          preparing = true
+          void created.loadURL(preparingPage())
+        }
+        if (progress === undefined) return
+        // The overlay owns its own rendering; racing its load is harmless
+        // because the last write wins and a lost one is corrected by the next.
+        void created.webContents.executeJavaScript(`window.dshProgress?.(${String(progress.done)},${String(progress.total)})`).catch(() => {})
       })
       readiness = await startHarness(closure)
       await created.loadURL(readiness.url)

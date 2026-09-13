@@ -61,6 +61,14 @@ interface ClosureMarker {
   restored: readonly string[]
 }
 
+/** How far a slow step has come, when it knows. */
+export interface ClosureProgress {
+  /** Entries handled so far. */
+  done: number
+  /** Entries the archive holds. */
+  total: number
+}
+
 /** Where a closure comes from and where it goes. */
 export interface EnsureClosureOptions {
   /** Absolute path of the shipped archive. */
@@ -70,7 +78,7 @@ export interface EnsureClosureOptions {
   /** Version key for the directory name; one directory per shipped closure. */
   version: string
   /** Reports work that takes time, and nothing when there is none to do. */
-  onProgress?: (message: string) => void
+  onProgress?: (message: string, progress?: ClosureProgress) => void
 }
 
 /** The directory one version occupies. */
@@ -125,17 +133,26 @@ export async function treeDigest(root: string, exclude?: string): Promise<string
   return createHash('sha256').update(parts.sort().join('\n')).digest('hex')
 }
 
+/** What the signed bundle records about this archive. */
+interface ArchiveReference {
+  /** Hex sha256 of the archive. */
+  sha256: string
+  /** How many entries the archive holds, when the reference states it. */
+  entries?: number
+}
+
 /** The digest the signed bundle records for this archive. */
-function expectedArchiveDigest(archive: string): string {
+function archiveReference(archive: string): ArchiveReference {
   const reference = `${archive}.sha256`
   if (!existsSync(reference)) {
     throw new Error(`the application's closure digest is missing at ${reference}`)
   }
-  const recorded = readFileSync(reference, 'utf8').trim().split(/\s+/)[0] ?? ''
+  const [recorded = '', entries] = readFileSync(reference, 'utf8').trim().split(/\s+/)
   if (!/^[0-9a-f]{64}$/.test(recorded)) {
     throw new Error(`the application's closure digest at ${reference} is not a sha256`)
   }
-  return recorded
+  const total = Number.parseInt(entries ?? '', 10)
+  return { sha256: recorded, ...(Number.isSafeInteger(total) && total > 0 ? { entries: total } : {}) }
 }
 
 /** Read a version's marker, or undefined when it cannot be trusted to describe the tree. */
@@ -217,15 +234,15 @@ function pruneOtherVersions(home: string, keep: string): void {
  * @returns the absolute path of the verified closure.
  */
 export async function ensureClosure(options: EnsureClosureOptions): Promise<string> {
-  const expected = expectedArchiveDigest(options.archive)
+  const reference = archiveReference(options.archive)
   if (!existsSync(options.archive)) {
     throw new Error(`the runtime closure archive is missing at ${options.archive}`)
   }
   const actual = await fileDigest(options.archive)
-  if (actual !== expected) {
+  if (actual !== reference.sha256) {
     throw new Error(
       `the runtime closure archive does not match the digest this application ships `
-      + `(expected ${expected.slice(0, 12)}…, found ${actual.slice(0, 12)}…); reinstall the application`,
+      + `(expected ${reference.sha256.slice(0, 12)}…, found ${actual.slice(0, 12)}…); reinstall the application`,
     )
   }
 
@@ -253,7 +270,14 @@ export async function ensureClosure(options: EnsureClosureOptions): Promise<stri
         // would write outside the application's data; refuse rather than trust.
         preservePaths: false,
         strict: true,
-        onentry: () => { files += 1 },
+        onentry: () => {
+          files += 1
+          // Every entry would be twenty thousand messages; the window only needs
+          // enough to move a bar.
+          if (files % 250 === 0 && reference.entries !== undefined) {
+            options.onProgress?.('expanding the runtime closure', { done: files, total: reference.entries })
+          }
+        },
       }),
     )
   } catch (error: unknown) {

@@ -48,6 +48,8 @@ const bytes = statSync(archive).size
 const digest = createHash('sha256')
 for await (const chunk of createReadStream(archive)) digest.update(chunk)
 const sha256 = digest.digest('hex')
-writeFileSync(`${archive}.sha256`, `${sha256}\n`)
+// The entry count rides along in the same `sha256sum`-style line, so the
+// application can show determinate progress while it expands the archive.
+writeFileSync(`${archive}.sha256`, `${sha256}  ${String(entries)}\n`)
 
 console.log(`pack-closure: ${String(entries)} entries -> ${archive} (${(bytes / 1_048_576).toFixed(1)} MB) sha256 ${sha256.slice(0, 12)}…`)

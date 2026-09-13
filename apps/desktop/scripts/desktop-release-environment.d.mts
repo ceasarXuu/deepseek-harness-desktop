@@ -9,7 +9,10 @@ export const MACOS_TEAM_ID_ENV: 'DSH_DESKTOP_MACOS_TEAM_ID'
 
 /** Public identity expected on a macOS release. */
 export interface MacOSSigningEnvironment {
+  /** Certificate qualifier used to build the expected codesign authority. */
   readonly signingIdentity: string
+  /** Exact certificate name passed to `codesign --sign`, defaulting to the qualifier. */
+  readonly certificateName?: string
   readonly teamId: string
 }
 

@@ -115,7 +115,7 @@ function runCodeSign(args) {
 export async function signMacOSRuntimeCode(path, identifier, expected) {
   await runAppleCommandAsync('/usr/bin/codesign', [
     '--force',
-    '--sign', expected.signingIdentity,
+    '--sign', expected.certificateName ?? expected.signingIdentity,
     '--identifier', identifier,
     '--timestamp',
     '--options', 'runtime',

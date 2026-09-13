@@ -195,13 +195,27 @@ describe('desktop macOS release signature', () => {
     expect(() => resolveDesktopAppId({ DSH_DESKTOP_APP_ID: 'not-a-bundle-id' })).toThrow(/reverse-DNS/u)
     expect(() => resolveMacOSSigningEnvironment({})).toThrow(/DSH_DESKTOP_MACOS_SIGNING_IDENTITY/u)
     expect(() => resolveMacOSSigningEnvironment({
-      DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Developer ID Application: Example Company (TEAMID1234)',
-      DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234',
-    })).toThrow(/must omit/u)
-    expect(() => resolveMacOSSigningEnvironment({
       DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)',
       DSH_DESKTOP_MACOS_TEAM_ID: 'short',
     })).toThrow(/10 uppercase/u)
+  })
+
+  it('accepts a full certificate common name and derives the expected authority', () => {
+    const expected = resolveMacOSSigningEnvironment({
+      DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Developer ID Application: Example Company (TEAMID1234)',
+      DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234',
+    })
+    expect(expected).toEqual({
+      signingIdentity: 'Example Company (TEAMID1234)',
+      certificateName: 'Developer ID Application: Example Company (TEAMID1234)',
+      teamId: 'TEAMID1234',
+    })
+    expect(() => {
+      assertMacOSSignatureDetails([
+        `Authority=Developer ID Application: ${expected.signingIdentity}`,
+        `TeamIdentifier=${expected.teamId}`,
+      ].join('\n'), expected)
+    }).not.toThrow()
   })
 
   it('requires one complete notarization credential strategy', () => {

@@ -246,8 +246,7 @@ async function stopHarness(): Promise<void> {
  * Expansion writes seventeen thousand files, and hiding the window until it
  * finishes would look like a launch that failed. It happens once per shipped
  * closure — on first launch and after an update — so this is the whole of the
- * first-run experience, and it reports how far along it is rather than
- * spinning: the application knows the entry count, so it can say so.
+ * first-run experience: a title and how far along it is, and nothing else.
  * @returns a data URL holding the overlay.
  */
 function preparingPage(): string {
@@ -255,34 +254,24 @@ function preparingPage(): string {
 <meta charset="utf-8">
 <title>DeepSeek Harness</title>
 <style>
-  :root { color-scheme: light dark; --fg: #1f1f1f; --muted: #6b6b6b; --line: #e0e0e0; --track: #ececec; }
-  @media (prefers-color-scheme: dark) { :root { --fg: #e8e8e8; --muted: #9a9a9a; --line: #333; --track: #2c2c2c; } }
-  body { margin: 0; height: 100vh; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center;
-         font: 13px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; color: var(--fg); background: transparent; }
+  :root { color-scheme: light dark; --fg: #1f1f1f; --track: #ececec; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e8e8; --track: #2c2c2c; } }
+  body { margin: 0; height: 100vh; display: flex; flex-direction: column; gap: 18px; align-items: center; justify-content: center;
+         font: 14px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; color: var(--fg); }
   .title { font-size: 15px; font-weight: 600; }
-  .muted { color: var(--muted); }
-  .en { font-size: 12px; }
-  .bar { width: 260px; height: 3px; margin-top: 8px; border-radius: 2px; background: var(--track); overflow: hidden; }
-  .fill { height: 100%; width: 0%; background: var(--fg); opacity: 0.55; transition: width 160ms linear; }
-  .count { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
-  /* Before the first count arrives there is nothing to report, so the bar breathes. */
+  .bar { width: 240px; height: 3px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--fg); opacity: 0.5; transition: width 160ms linear; }
+  /* Until the first count arrives there is nothing to report, so the bar breathes. */
   .bar.pending .fill { width: 35%; animation: sweep 1.4s ease-in-out infinite; }
   @keyframes sweep { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
 </style>
-<div class="title">环境准备中…</div>
-<p class="muted">首次启动或更新后需要展开运行时，只需一次。</p>
-<p class="muted en">Preparing the environment — this happens once after an install or an update.</p>
+<div class="title">环境准备中</div>
 <div class="bar pending" id="bar"><div class="fill" id="fill"></div></div>
-<p class="count" id="count"></p>
 <script>
   window.dshProgress = (done, total) => {
-    const bar = document.getElementById('bar')
-    const fill = document.getElementById('fill')
-    const count = document.getElementById('count')
-    const ratio = total > 0 ? Math.min(1, done / total) : 0
-    bar.classList.remove('pending')
-    fill.style.width = (ratio * 100).toFixed(1) + '%'
-    count.textContent = done.toLocaleString() + ' / ' + total.toLocaleString()
+    if (!(total > 0)) return
+    document.getElementById('bar').classList.remove('pending')
+    document.getElementById('fill').style.width = (Math.min(1, done / total) * 100).toFixed(1) + '%'
   }
 </script>`
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`

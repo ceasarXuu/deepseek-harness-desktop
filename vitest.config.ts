@@ -85,8 +85,9 @@ const pwshCoverageExclusions = spawnSync(resolvePwshPath(), ['-NoLogo', '-NoProf
 const testIncludes = [
   'packages/*/*/tests/**/*.spec.{ts,tsx}',
   'apps/*/tests/**/*.spec.ts',
-  // The desktop subtree's own packages; the shell and bundle carry no tests yet.
+  // The desktop subtree's own packages and its shell.
   'desktop/packages/*/tests/**/*.spec.ts',
+  'desktop/apps/*/tests/**/*.spec.ts',
   'examples/*/tests/**/*.spec.ts',
   'scripts/**/*.spec.ts',
 ]

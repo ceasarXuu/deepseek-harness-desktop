@@ -1,0 +1,30 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../packages/core/tools"
+    },
+    {
+      "path": "../../../packages/host/webserver"
+    },
+    {
+      "path": "../../../packages/mcp/mcp-client"
+    },
+    {
+      "path": "../../../packages/util/atomic-write"
+    },
+    {
+      "path": "../../../packages/util/home-paths"
+    }
+  ]
+}

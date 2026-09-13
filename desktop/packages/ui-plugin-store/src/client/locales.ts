@@ -1,0 +1,68 @@
+/** Copy dictionaries for the desktop Plugins panel. */
+
+/** Simplified Chinese dictionary and key source of truth. */
+export const zh = {
+  tab: '已安装',
+  title: '插件',
+  about: '插件是安装在应用之外的自包含程序。每个插件在自己的进程中运行，并把工具提供给 agent。',
+  loading: '正在读取插件…',
+  empty: '尚未安装任何插件。',
+  directoryLabel: '安装位置',
+  installHeading: '安装插件',
+  chooseFile: '选择文件…',
+  noFileChosen: '未选择文件',
+  urlPlaceholder: 'https://example.com/plugin.mcpb',
+  install: '安装',
+  installing: '安装中…',
+  stateMounted: '运行中',
+  stateDisabled: '已停用',
+  stateFailed: '启动失败',
+  enable: '启用',
+  disable: '停用',
+  remove: '卸载',
+  confirmRemove: '卸载该插件？',
+  confirmRemoveBody: '它的文件会被删除。会话与设置不受影响。',
+  cancel: '取消',
+  trustTitle: '要运行这个插件吗？',
+  trustBody: '插件来自外部来源，是一个以你的用户身份在本机运行的程序，并且可以被 agent 调用。请只在你信任其来源时安装。',
+  trustAccept: '安装并运行',
+  toolsLabel: '工具',
+  sourceLabel: '来源',
+  detailLabel: '原因',
+  authorUnknown: '作者未知',
+} satisfies Record<string, string>
+
+/** Plugins-panel locale key union. */
+export type PluginStoreLocaleKey = keyof typeof zh
+
+/** English dictionary checked against the Chinese key set. */
+export const en = {
+  tab: 'Installed',
+  title: 'Plugins',
+  about: 'Plugins are self-contained programs installed outside the application. Each one runs in its own process and exposes tools to the agent.',
+  loading: 'Loading plugins…',
+  empty: 'No plugins are installed.',
+  directoryLabel: 'Installed in',
+  installHeading: 'Install a plugin',
+  chooseFile: 'Choose file…',
+  noFileChosen: 'No file chosen',
+  urlPlaceholder: 'https://example.com/plugin.mcpb',
+  install: 'Install',
+  installing: 'Installing…',
+  stateMounted: 'Running',
+  stateDisabled: 'Disabled',
+  stateFailed: 'Failed to start',
+  enable: 'Enable',
+  disable: 'Disable',
+  remove: 'Remove',
+  confirmRemove: 'Remove this plugin?',
+  confirmRemoveBody: 'Its files are deleted. Conversations and settings are not affected.',
+  cancel: 'Cancel',
+  trustTitle: 'Run this plugin?',
+  trustBody: 'A plugin is a program from an outside source. It runs on this machine with your user account and can be called by the agent. Install it only if you trust where it came from.',
+  trustAccept: 'Install and run',
+  toolsLabel: 'Tools',
+  sourceLabel: 'Source',
+  detailLabel: 'Reason',
+  authorUnknown: 'Unknown author',
+} satisfies Record<PluginStoreLocaleKey, string>

@@ -1,0 +1,204 @@
+# CI for this fork.
+#
+# The upstream `.github/workflows/ci.yml` is kept unmodified but cannot run
+# here: its jobs target organization-restricted pools (`dsh-ubuntu-24-04-16core`,
+# `dsh-windows-2025-16core`) and self-hosted labels (`[self-hosted, linux, x64,
+# vm-backup]`, `[self-hosted, dsh-win-ci, windows]`) that do not exist for this
+# account, so a dispatched run would queue indefinitely instead of reporting.
+# This workflow is the fork's own signal and uses only standard GitHub-hosted
+# runners, which are free without a minute quota for public repositories.
+#
+# `pnpm/action-setup` is load-bearing rather than conventional.
+# `scripts/run-gates.ts` spawns every gate as `node <npm_execpath> ...`, which
+# works only when npm_execpath names a JavaScript entry point. The standalone
+# `@pnpm/exe` distribution — what a version manager such as mise installs
+# locally — points npm_execpath at a native binary, and every gate then fails
+# with `SyntaxError: Invalid or unexpected token`. Installing pnpm through this
+# action keeps npm_execpath on the JavaScript entry.
+name: Fork CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  # CI must never report to the production telemetry endpoint baked into the
+  # base composition; the row disables itself when this is set.
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  static:
+    name: static gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # A standard hosted Linux runner has four CPUs where the upstream pools
+      # have 8-16, and several gates each build a full ts.Program.
+      DSH_GATE_CONCURRENCY: '4'
+    steps:
+      # Complete history: the frozen-archive gate reads the trusted PR base.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      # The frozen-archive gate compares the manifest against the pre-change
+      # commit and falls back to HEAD only when the variable is UNSET: an empty
+      # value is used as-is and fails `git rev-parse`. The expression this fork
+      # inherited from the upstream pull-request job resolves to the empty
+      # string on a push, so the baseline is resolved here instead, and left
+      # unset when the event carries no usable commit (a first push, whose
+      # `before` is the null object id, and a manual dispatch, which has none).
+      - name: Resolve the archive baseline
+        run: |
+          case "${{ github.event_name }}" in
+            pull_request) ref="${{ github.event.pull_request.base.sha }}" ;;
+            *) ref="${{ github.event.before }}" ;;
+          esac
+          case "$ref" in
+            ''|0000000000000000000000000000000000000000)
+              echo 'No usable archive baseline; the gate compares against HEAD.' ;;
+            *)
+              echo "DSH_ARCHIVE_BASE_REF=$ref" >> "$GITHUB_ENV" ;;
+          esac
+
+      - name: Run static gates
+        run: pnpm run check:ci:static
+
+  test:
+    name: unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      # Capped rather than left to the default, which is one forked worker per
+      # CPU for each of the config's two projects. The process-bound project
+      # spawns real children, and its host-exit scenarios boot the harness
+      # through tsx, so they need CPU at the moment they run. Under the default
+      # on a four-CPU runner, eight workers plus the spawned children
+      # oversubscribe the machine and `packages/subprocess/subprocess-local`
+      # process-exit scenarios time out: the terminal scenario measures 332 ms
+      # in isolation and reached its 30 s ceiling on the loaded runner.
+      #
+      # No `--` separator: pnpm forwards it literally, and vitest would read
+      # every following flag as a filename filter.
+      - name: Run unit tests
+        run: pnpm run test --maxWorkers=2
+
+  snapshot:
+    name: snapshot replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      # The replayed scenarios execute real shell commands under the sandbox,
+      # whose Linux chain resolves bubblewrap before Landlock. A stock hosted
+      # image ships neither bubblewrap nor an unrestricted unprivileged user
+      # namespace, so the sandbox refuses to run and the scenarios that invoke
+      # the shell diverge. Upstream's consumer lane supplies both through this
+      # script; the pinned and checksum-verified payload keeps it off the
+      # runner's package transaction.
+      - name: Prepare bubblewrap
+        run: bash scripts/prepare-ci-bubblewrap.sh
+
+      # The pwsh-tool-turn scenario boots a composition that mounts the pwsh
+      # tool. That row is gated to win32, while the scenario's skip guard probes
+      # whether a `pwsh` executable runs — and the standard Ubuntu image ships
+      # PowerShell, so the guard admits a scenario whose composition can never
+      # mount the tool. Upstream's own Linux pools carry no pwsh, which is why
+      # the guard's inventory/platform mismatch is invisible there. Removing it
+      # restores the condition the guard is written for: the scenario skips as
+      # designed and the rest of that file still runs.
+      - name: Remove the preinstalled pwsh
+        run: if command -v pwsh >/dev/null 2>&1; then sudo rm -f "$(command -v pwsh)"; fi
+
+      # Keyless: the snapshot suite replays recorded interactions against
+      # expected transcripts and needs no model credential.
+      - name: Build and replay snapshots
+        run: pnpm run check:ci:snapshot
+
+  macos:
+    name: macos
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      # The desktop release targets macOS, so a macOS lane is the only place
+      # that catches platform-specific behavior in the packages it depends on:
+      # the node-pty addon, the Seatbelt sandbox rung, and the process
+      # inspection paths in the persistent terminal backend.
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      # Same cap and reason as the Linux lane: a standard macOS runner has few
+      # CPUs, and the process-bound project's scenarios need one free when they
+      # spawn and boot a child.
+      - name: Run unit tests
+        run: pnpm run test --maxWorkers=2

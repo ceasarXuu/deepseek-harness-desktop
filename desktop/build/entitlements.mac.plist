@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  One entitlements file covers the whole bundle because there is one executable:
+  the harness child is the Electron binary re-entered with ELECTRON_RUN_AS_NODE=1,
+  so it shares this signature, these entitlements, and the team identifier.
+
+  Sandbox entitlements are absent by design. The agent executes shell commands,
+  reads and writes the user's workspace, and spawns language processes, none of
+  which a sandboxed application may do.
+-->
+<plist version="1.0">
+<dict>
+	<!-- V8 in the renderer requires writable-executable memory. -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<!-- V8 code generation paths that bypass the JIT allocation path. -->
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+	<!-- The closure loads native modules and dynamic libraries signed by their
+	     upstream publishers rather than by this application's build. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+	<!-- Electron's child-process launch path. -->
+	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
+	<true/>
+</dict>
+</plist>

@@ -11,10 +11,17 @@ async function main() {
   document.querySelector('#reinstall-advice').textContent = messages.startupReinstallAdvice
   function render(state) {
     const failed = state.phase === 'error'
+    const runtime = failed ? undefined : state.runtime
+    const percent = runtime === undefined ? 0
+      : runtime.total > 0 ? Math.min(100, Math.round((runtime.done / runtime.total) * 100)) : 100
     document.querySelector('main').setAttribute('aria-busy', String(!failed))
     document.querySelector('#spinner').hidden = failed
     document.querySelector('#title').textContent = failed ? messages.startupFailed : messages.startupLoading
-    document.querySelector('#description').textContent = failed ? messages.startupErrorDescription : messages.startupLoadingDescription
+    document.querySelector('#description').textContent = failed ? messages.startupErrorDescription
+      : runtime === undefined ? messages.startupLoadingDescription : messages.startupExpandingRuntime
+    document.querySelector('#progress').hidden = runtime === undefined
+    document.querySelector('#progress').setAttribute('aria-valuenow', String(percent))
+    document.querySelector('#progress-bar').style.width = `${percent}%`
     document.querySelector('#error').hidden = !failed
     document.querySelector('#error').textContent = failed ? state.message : ''
     document.querySelector('#actions').hidden = !failed

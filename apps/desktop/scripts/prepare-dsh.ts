@@ -18,6 +18,13 @@ import {
 import { smokeDesktopRuntime } from './smoke-runtime.ts'
 import { writeDesktopRuntime, verifyDesktopRuntime } from '../src/runtime-tree.ts'
 import {
+  DESKTOP_RUNTIME_MARKER,
+  ensureDesktopRuntime,
+  packRuntimeArchive,
+  treeDigest,
+  type DesktopRuntimeArchiveRecord,
+} from '../src/runtime-closure.ts'
+import {
   resolveDesktopAppId,
   resolveMacOSSigningEnvironment,
 } from './desktop-release-environment.mjs'
@@ -58,6 +65,27 @@ function desktopRelease(): DesktopRelease {
     nodeVersion: runtime.node,
     pnpmVersion: runtime.pnpm,
   })
+}
+
+/**
+ * Prove that the archive the release carries expands to the tree that was packed.
+ * @param archive - Archive written for this target.
+ * @param record - Entry count and digests of the packed tree.
+ * @param version - Release version used as the expansion's directory key.
+ */
+async function verifyRuntimeArchiveRoundTrip(
+  archive: string, record: DesktopRuntimeArchiveRecord, version: string,
+): Promise<void> {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-desktop-expansion-'))
+  try {
+    const expanded = await ensureDesktopRuntime({ archive, home, version })
+    const digest = await treeDigest(expanded, join(expanded, DESKTOP_RUNTIME_MARKER))
+    if (digest !== record.treeSha256) {
+      throw new Error('desktop runtime: the shipped archive does not expand to the packed tree')
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
 }
 
 function runPnpm(args: readonly string[]): Promise<void> {
@@ -147,6 +175,9 @@ async function main(): Promise<void> {
     })
     await smokeDesktopRuntime(DSH_OUTPUT_ROOT, NODE, descriptor)
     await verifyDesktopRuntime(DSH_OUTPUT_ROOT, release.version, target)
+    const archive = await packRuntimeArchive(DSH_OUTPUT_ROOT, BUILD_PATHS.archive)
+    await verifyRuntimeArchiveRoundTrip(BUILD_PATHS.archive, archive, release.version)
+    console.log(`desktop runtime: ${String(archive.entries)} entries -> ${BUILD_PATHS.archive} (${(archive.bytes / 1_048_576).toFixed(1)} MB)`)
   } catch (error) {
     rmSync(DSH_OUTPUT_ROOT, { recursive: true, force: true })
     throw error

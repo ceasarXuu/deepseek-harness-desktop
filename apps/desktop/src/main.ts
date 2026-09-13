@@ -22,6 +22,7 @@ import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { startupFailureDocument } from './startup-document.ts'
+import { DESKTOP_RUNTIME_ARCHIVE, ensureDesktopRuntime, type DesktopRuntimeProgress } from './runtime-closure.ts'
 
 const SCHEME = 'dsh-app'
 let focusPrimaryWindow = (): void => {}
@@ -67,14 +68,31 @@ interface RuntimeResources {
   readonly dsh: string
 }
 
-function runtimeResources(): RuntimeResources {
+function runtimeResources(dsh: string): RuntimeResources {
   const development = !app.isPackaged
   const node = (development ? process.env.DSH_DESKTOP_NODE_BINARY : undefined)
     ?? join(process.resourcesPath, 'runtime', 'node', process.platform === 'win32' ? 'node.exe' : 'node')
   const pnpm = (development ? process.env.DSH_DESKTOP_PNPM_ENTRY : undefined)
     ?? join(process.resourcesPath, 'runtime', 'pnpm', 'bin', 'pnpm.mjs')
-  const dsh = (development ? process.env.DSH_DESKTOP_DSH_DIR : undefined) ?? join(process.resourcesPath, 'dsh')
   return { node, pnpm, dsh }
+}
+
+/**
+ * Expand the shipped runtime archive when the version in place is not the tree it describes.
+ * @param closure - Directory holding one subdirectory per shipped runtime version.
+ * @param version - Release version naming this expansion.
+ * @param onProgress - Receives first-launch work for the loading window.
+ * @returns Absolute path of the verified runtime tree.
+ */
+async function expandRuntimeArchive(
+  closure: string, version: string, onProgress: (progress: DesktopRuntimeProgress) => void,
+): Promise<string> {
+  return await ensureDesktopRuntime({
+    archive: join(process.resourcesPath, DESKTOP_RUNTIME_ARCHIVE),
+    home: closure,
+    version,
+    onProgress,
+  })
 }
 
 function developmentHostInspectPort(enabled: boolean): number | undefined {
@@ -148,10 +166,14 @@ async function serveShellAsset(request: Request): Promise<Response> {
 }
 
 async function main(): Promise<void> {
-  const resources = runtimeResources()
   const paths = resolveDesktopPaths()
   const development = app.isPackaged ? undefined : join(app.getAppPath(), '.desktop-build', 'development', 'project')
   const activeProject = development ?? paths.profile
+  // Every consumer resolves the runtime through the expanded tree rather than the bundle: the
+  // archive is what the installer carries, and this is where its contents appear.
+  const resources = runtimeResources(development === undefined
+    ? join(paths.closure, app.getVersion())
+    : process.env.DSH_DESKTOP_DSH_DIR ?? development)
   const manager = new DesktopProjectManager(paths, resources)
   profileRecoveryAvailable = () => development === undefined && manager.canRecoverProfile()
   let pageError: Extract<DesktopBackendState, { phase: 'error' }> | undefined
@@ -491,6 +513,19 @@ async function main(): Promise<void> {
   })
 
   mainWindow = createMainWindow()
+  // The loading page is up before the first launch expands the runtime, so the expansion has
+  // somewhere to report what it is doing.
+  await navigateMain(startupUrl).catch((error: unknown) => { console.error(error) })
+  if (development === undefined) {
+    try {
+      await expandRuntimeArchive(paths.closure, app.getVersion(), (progress) => {
+        publishBackend({ phase: 'starting', runtime: progress })
+      })
+    } catch (error: unknown) {
+      await showStartupError(error)
+      return
+    }
+  }
   await reconcileBackend().catch(() => undefined)
   // Window lifecycle callbacks run while backend startup is pending.
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition

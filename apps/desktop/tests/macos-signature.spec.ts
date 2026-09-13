@@ -1,10 +1,18 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { basename, join } from 'node:path'
 import { createRequire } from 'node:module'
 import { FileMatcher } from 'app-builder-lib/out/fileMatcher.js'
 import { runtimeFixture } from './runtime-fixture.ts'
-import { verifyDesktopRuntime } from '../src/runtime-tree.ts'
+import {
+  DESKTOP_RUNTIME_ARCHIVE,
+  DESKTOP_RUNTIME_ARCHIVE_DIGEST,
+  ensureDesktopRuntime,
+  fileDigest,
+  packRuntimeArchive,
+  verifyRuntimeArchive,
+} from '../src/runtime-closure.ts'
+import { DESKTOP_RUNTIME_ARCHIVE as DESKTOP_RUNTIME_ARCHIVE_NAME } from '../scripts/desktop-build-paths.mjs'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { NotarizeOptions } from '@electron/notarize'
 import {
@@ -54,16 +62,21 @@ describe('desktop macOS release signature', () => {
     expect(portablePath(config.directories.output)).toContain('/.desktop-build/targets/mac-arm64/artifacts')
     expect(config.extraResources).toHaveLength(3)
     expect(config.extraResources[0]?.to).toBe('runtime')
-    expect(config.extraResources[1]?.to).toBe('dsh')
+    // The packaged application reads these two names from `process.resourcesPath`.
+    expect(config.extraResources.map(entry => entry.to)).toEqual([
+      'runtime', DESKTOP_RUNTIME_ARCHIVE, DESKTOP_RUNTIME_ARCHIVE_DIGEST,
+    ])
+    expect(DESKTOP_RUNTIME_ARCHIVE).toBe(DESKTOP_RUNTIME_ARCHIVE_NAME)
     expect(portablePath(config.extraResources[0]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/runtime')
-    expect(portablePath(config.extraResources[1]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/dsh')
+    expect(portablePath(config.extraResources[1]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/desktop-runtime.tar.zst')
+    expect(portablePath(config.extraResources[2]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/desktop-runtime.tar.zst.sha256')
     expect(config).toMatchObject({
       appId: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
       mac: {
         identity: RELEASE_ENVIRONMENT.DSH_DESKTOP_MACOS_SIGNING_IDENTITY,
         forceCodeSigning: true,
         notarize: true,
-        signIgnore: ['/Contents/Resources/dsh(?:/|$)', '\\.pak$'],
+        signIgnore: ['\\.pak$'],
       },
       dmg: {
         sign: true,
@@ -84,6 +97,8 @@ describe('desktop macOS release signature', () => {
     expect(ignored('/App.app/Contents/Frameworks/Electron.framework/Versions/A/Resources/en.lproj/locale.pak')).toBe(true)
     expect(ignored('/App.app/Contents/Frameworks/Electron.framework/Versions/A/Resources/resources.pak')).toBe(true)
     for (const path of [
+      `/App.app/Contents/Resources/${DESKTOP_RUNTIME_ARCHIVE}`,
+      `/App.app/Contents/Resources/${DESKTOP_RUNTIME_ARCHIVE_DIGEST}`,
       '/App.app/Contents/Resources/runtime/node/node',
       '/App.app/Contents/Resources/runtime/pnpm/addon.node',
       '/App.app/Contents/Frameworks/Electron.framework/Versions/A/library.dylib',
@@ -92,23 +107,27 @@ describe('desktop macOS release signature', () => {
     ]) expect(ignored(path)).toBe(false)
   })
 
-  it('copies the complete runtime despite electron-builder excluding root node_modules', async () => {
+  it('carries the archive and the digest beside it into the application resources', async () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     const config = createElectronBuilderConfig(RELEASE_ENVIRONMENT, 'darwin', 'arm64')
     const root = mkdtempSync(join(tmpdir(), 'desktop-resource-copy-'))
     try {
       const source = join(root, 'source')
       const destination = join(root, 'resources')
-      runtimeFixture(source)
-      const sourceRoot = config.extraResources[1].from
-      const matchers = config.extraResources.slice(1).map(entry => new FileMatcher(
-        join(source, relative(sourceRoot, entry.from)), join(destination, entry.to), value => value,
+      const tree = join(source, 'dsh')
+      mkdirSync(tree, { recursive: true })
+      runtimeFixture(tree)
+      await packRuntimeArchive(tree, join(source, DESKTOP_RUNTIME_ARCHIVE))
+      // electron-builder copies each extraResource with this copier. The application then reads
+      // the archive beside its digest, which is what makes the recorded digest a reference.
+      const matchers = config.extraResources.filter(entry => entry.to !== 'runtime').map(entry => new FileMatcher(
+        join(source, basename(entry.from)), join(destination, entry.to), value => value,
       ))
-      await copyFiles(matchers.slice(0, 1))
-      await expect(verifyDesktopRuntime(join(destination, 'dsh'), '1.0.0')).rejects.toThrow(/ENOENT/u)
-      rmSync(destination, { recursive: true })
       await copyFiles(matchers)
-      await expect(verifyDesktopRuntime(join(destination, 'dsh'), '1.0.0')).resolves.toMatchObject({ release: { version: '1.0.0' } })
+      const copied = join(destination, DESKTOP_RUNTIME_ARCHIVE)
+      await expect(verifyRuntimeArchive(copied)).resolves.toBe(await fileDigest(join(source, DESKTOP_RUNTIME_ARCHIVE)))
+      await expect(ensureDesktopRuntime({ archive: copied, home: join(root, 'closure'), version: '1.0.0' }))
+        .resolves.toBe(join(root, 'closure', '1.0.0'))
     } finally { rmSync(root, { recursive: true, force: true }) }
   })
 

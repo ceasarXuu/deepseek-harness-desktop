@@ -1,5 +1,11 @@
 import type { DesktopAutoUpdateTarget } from './desktop-auto-update-environment.mjs'
 
+/** The archive the application carries, named as `src/runtime-closure.ts` looks for it. */
+export const DESKTOP_RUNTIME_ARCHIVE: 'desktop-runtime.tar.zst'
+
+/** The digest of {@link DESKTOP_RUNTIME_ARCHIVE}, carried beside it. */
+export const DESKTOP_RUNTIME_ARCHIVE_DIGEST: 'desktop-runtime.tar.zst.sha256'
+
 /** Mutable target directories plus the shared immutable download cache. */
 export interface DesktopTargetBuildPaths {
   readonly root: string
@@ -12,6 +18,8 @@ export interface DesktopTargetBuildPaths {
   readonly packedDsh: string
   readonly packedVendor: string
   readonly packedLandlock: string
+  readonly archive: string
+  readonly archiveDigest: string
   readonly downloads: string
 }
 

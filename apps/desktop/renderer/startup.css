@@ -4,6 +4,8 @@ main { width: min(560px, calc(100vw - 64px)); padding: 40px 0; text-align: cente
 h1 { margin: 24px 0 12px; font-size: 22px; font-weight: 600; }
 p { color: #666; line-height: 1.6; }
 #spinner { width: 32px; height: 32px; margin: auto; border: 3px solid #dedee3; border-top-color: #4d6bfe; border-radius: 50%; animation: spin 0.9s linear infinite; }
+#progress { width: 240px; height: 4px; margin: 20px auto 0; border-radius: 2px; background: #dedee3; overflow: hidden; }
+#progress-bar { width: 0; height: 100%; border-radius: 2px; background: #4d6bfe; transition: width 0.2s linear; }
 #error { padding: 16px; border: 1px solid #e0e0e5; border-radius: 10px; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; font: 13px/1.6 ui-monospace, monospace; }
 #actions { margin-top: 24px; }
 button { margin: 4px; padding: 10px 18px; border: 1px solid transparent; border-radius: 8px; color: #fff; background: #4d6bfe; font: inherit; cursor: pointer; }
@@ -12,5 +14,5 @@ button:disabled { opacity: 0.5; cursor: default; }
 button:focus-visible { outline: 2px solid #4d6bfe; outline-offset: 3px; }
 [hidden] { display: none !important; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-color-scheme: dark) { :root { color: #ededf0; background: #171719; } p { color: #aaaab3; } #error { border-color: #38383f; } #spinner { border-color: #38383f; border-top-color: #6a85ff; } }
-@media (prefers-reduced-motion: reduce) { #spinner { animation: none; } }
+@media (prefers-color-scheme: dark) { :root { color: #ededf0; background: #171719; } p { color: #aaaab3; } #error { border-color: #38383f; } #spinner { border-color: #38383f; border-top-color: #6a85ff; } #progress { background: #38383f; } }
+@media (prefers-reduced-motion: reduce) { #spinner { animation: none; } #progress-bar { transition: none; } }

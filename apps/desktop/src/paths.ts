@@ -8,6 +8,8 @@ export interface DesktopPaths {
   readonly root: string
   readonly profile: string
   readonly lock: string
+  /** Directory whose per-version subdirectories hold the expanded runtime. */
+  readonly closure: string
   readonly pnpm: {
     readonly root: string
     readonly store: string
@@ -30,6 +32,7 @@ export function resolveDesktopPaths(dshHome: string = resolveDshHome()): Desktop
     root,
     profile: join(dshHome, 'profiles', 'desktop'),
     lock: join(dshHome, 'profiles', 'desktop', 'lock'),
+    closure: join(dshHome, 'closure'),
     pnpm: {
       root: pnpm,
       store: join(pnpm, 'store'),

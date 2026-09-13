@@ -85,6 +85,28 @@ it('shows English loading and recovery actions without a Host document', async (
   expect(page.element('main').getAttribute('aria-busy')).toBe('true')
 })
 
+it.each([
+  ['en', 'Preparing the bundled runtime…', 'Your workspace will open when it is ready.'],
+  ['zh-CN', '正在准备内置运行时…', '准备就绪后将自动打开工作区。'],
+])('shows determinate runtime progress while the first launch expands the archive (%s)', async (locale, expanding, loading) => {
+  const page = startup(locale)
+  await expect.poll(() => page.element('#title').textContent).not.toBe('')
+  expect(page.element('#progress').hidden).toBe(true)
+  page.publish({ phase: 'starting', runtime: { stage: 'expanding', done: 25, total: 100 } })
+  expect(page.element('#description').textContent).toBe(expanding)
+  expect(page.element('#progress').hidden).toBe(false)
+  expect(page.element('#progress').getAttribute('aria-valuenow')).toBe('25')
+  expect(page.element('#progress-bar').style.width).toBe('25%')
+  expect(page.element('#spinner').hidden).toBe(false)
+  // The final digest pass reports no counts of its own, so the bar holds at completion.
+  page.publish({ phase: 'starting', runtime: { stage: 'verifying', done: 0, total: 0 } })
+  expect(page.element('#progress').getAttribute('aria-valuenow')).toBe('100')
+  expect(page.element('#progress-bar').style.width).toBe('100%')
+  page.publish({ phase: 'ready' })
+  expect(page.element('#progress').hidden).toBe(true)
+  expect(page.element('#description').textContent).toBe(loading)
+})
+
 it('shows Chinese loading and recovery copy', async () => {
   const page = startup('zh-CN')
   await expect.poll(() => page.element('#title').textContent).not.toBe('')

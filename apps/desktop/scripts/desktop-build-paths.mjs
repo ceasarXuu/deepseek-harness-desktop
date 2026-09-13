@@ -6,6 +6,12 @@ const APP_ROOT = resolve(import.meta.dirname, '..')
 const BUILD_ROOT = join(APP_ROOT, '.desktop-build')
 const SUPPORTED_TARGETS = new Set(['mac-arm64', 'mac-x64', 'win-x64'])
 
+/** The archive the application carries, named as `src/runtime-closure.ts` looks for it. */
+export const DESKTOP_RUNTIME_ARCHIVE = 'desktop-runtime.tar.zst'
+
+/** The digest of {@link DESKTOP_RUNTIME_ARCHIVE}, carried beside it. */
+export const DESKTOP_RUNTIME_ARCHIVE_DIGEST = `${DESKTOP_RUNTIME_ARCHIVE}.sha256`
+
 /**
  * Resolve the fixed build target selected by a packaging environment.
  * @param {NodeJS.ProcessEnv} env - Packaging environment.
@@ -31,7 +37,7 @@ export function resolveDesktopBuildTarget(
 /**
  * Return the mutable preparation and artifact directories owned by one release target.
  * @param {'mac-arm64' | 'mac-x64' | 'win-x64'} target - Supported Desktop target name.
- * @returns {{ root: string, artifacts: string, runtime: string, packageSet: string, dsh: string, dshPnpm: string, nodeExtract: string, packedDsh: string, packedVendor: string, packedLandlock: string, downloads: string }} Target paths plus the shared immutable download cache.
+ * @returns {{ root: string, artifacts: string, runtime: string, packageSet: string, dsh: string, dshPnpm: string, nodeExtract: string, packedDsh: string, packedVendor: string, packedLandlock: string, archive: string, archiveDigest: string, downloads: string }} Target paths plus the shared immutable download cache.
  */
 export function desktopTargetBuildPaths(target) {
   if (!SUPPORTED_TARGETS.has(target)) {
@@ -50,6 +56,8 @@ export function desktopTargetBuildPaths(target) {
     packedDsh: join(packed, 'dsh'),
     packedVendor: join(packed, 'vendor'),
     packedLandlock: join(packed, 'landlock'),
+    archive: join(root, DESKTOP_RUNTIME_ARCHIVE),
+    archiveDigest: join(root, DESKTOP_RUNTIME_ARCHIVE_DIGEST),
     downloads: join(BUILD_ROOT, 'downloads'),
   }
 }

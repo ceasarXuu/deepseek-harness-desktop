@@ -6,8 +6,8 @@ export interface DesktopElectronBuilderConfig {
   }
   readonly extraResources: readonly [
     { readonly from: string, readonly to: 'runtime' },
-    { readonly from: string, readonly to: 'dsh' },
-    { readonly from: string, readonly to: 'dsh/node_modules' },
+    { readonly from: string, readonly to: 'desktop-runtime.tar.zst' },
+    { readonly from: string, readonly to: 'desktop-runtime.tar.zst.sha256' },
   ]
   readonly mac: {
     readonly identity: string | undefined

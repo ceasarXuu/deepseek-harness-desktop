@@ -12,7 +12,12 @@ import {
   installWindowsNsisBootstrapSigner,
 } from './scripts/windows-sign.mjs'
 import { resolveDesktopAutoUpdateConfig } from './scripts/desktop-auto-update-environment.mjs'
-import { desktopTargetBuildPaths, resolveDesktopBuildTarget } from './scripts/desktop-build-paths.mjs'
+import {
+  DESKTOP_RUNTIME_ARCHIVE,
+  DESKTOP_RUNTIME_ARCHIVE_DIGEST,
+  desktopTargetBuildPaths,
+  resolveDesktopBuildTarget,
+} from './scripts/desktop-build-paths.mjs'
 
 /**
  * Create electron-builder configuration from one release environment.
@@ -66,17 +71,18 @@ export function createElectronBuilderConfig(
     ],
     extraResources: [
       { from: buildPaths.runtime, to: 'runtime' },
-      { from: buildPaths.dsh, to: 'dsh' },
-      // electron-builder excludes a source directory's root node_modules.
-      { from: join(buildPaths.dsh, 'node_modules'), to: 'dsh/node_modules' },
+      // The production dependency tree travels as one verified archive, which the
+      // application expands on its first launch instead of reading it in place.
+      { from: buildPaths.archive, to: DESKTOP_RUNTIME_ARCHIVE },
+      { from: buildPaths.archiveDigest, to: DESKTOP_RUNTIME_ARCHIVE_DIGEST },
     ],
     mac: {
       category: 'public.app-category.developer-tools',
       identity: macOSSigning?.signingIdentity,
       forceCodeSigning: true,
       hardenedRuntime: true,
-      // Native runtime files are pre-signed; PAK resources are sealed by their enclosing bundle.
-      signIgnore: ['/Contents/Resources/dsh(?:/|$)', '\\.pak$'],
+      // Native runtime files are pre-signed inside the archive; PAK resources are sealed by their enclosing bundle.
+      signIgnore: ['\\.pak$'],
       notarize: true,
       target: ['dmg', 'zip'],
     },
@@ -85,15 +91,13 @@ export function createElectronBuilderConfig(
       writeUpdateInfo: false,
     },
     afterPack: async context => {
-      const { verifyDesktopRuntime } = await import('./lib/types/runtime-tree.js')
-      await verifyDesktopRuntime(join(context.packager.getResourcesDir(context.appOutDir), 'dsh'),
-        context.packager.appInfo.version, { platform: resolvedPlatform, arch: resolvedArch })
+      const { verifyRuntimeArchive } = await import('./lib/types/runtime-closure.js')
+      await verifyRuntimeArchive(join(context.packager.getResourcesDir(context.appOutDir), DESKTOP_RUNTIME_ARCHIVE))
     },
     afterSign: async context => {
       if (context.electronPlatformName !== 'darwin') return
-      const { verifyDesktopRuntime } = await import('./lib/types/runtime-tree.js')
-      await verifyDesktopRuntime(join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources', 'dsh'),
-        context.packager.appInfo.version, { platform: 'darwin', arch: resolvedArch })
+      const { verifyRuntimeArchive } = await import('./lib/types/runtime-closure.js')
+      await verifyRuntimeArchive(join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources', DESKTOP_RUNTIME_ARCHIVE))
       verifyMacOSSignatureAfterSign(context, macOSSigning ?? resolveMacOSSigningEnvironment(env))
     },
     artifactBuildCompleted: artifact => {

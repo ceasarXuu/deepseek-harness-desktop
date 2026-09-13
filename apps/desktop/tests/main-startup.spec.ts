@@ -78,6 +78,10 @@ const harness = await vi.hoisted(async () => {
     applyRelease: vi.fn(() => { preparing.resolve(); return prepared.promise }),
     assertProfileRuntime: vi.fn(),
     canRecoverProfile: vi.fn(() => true),
+    expandRuntime: vi.fn(async (options: { home: string; version: string; onProgress?: (progress: unknown) => void }) => {
+      options.onProgress?.({ stage: 'expanding', done: 1, total: 2 })
+      return join(options.home, options.version)
+    }),
     get preparing() { return preparing }, get prepared() { return prepared },
     get hostStarted() { return hostStarted }, get navigated() { return navigated },
     get errorPublished() { return errorPublished }, get quitCompleted() { return quitCompleted },
@@ -104,7 +108,11 @@ vi.mock('electron', () => ({
   Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn() },
   protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },
 }))
-vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: 'desktop-test-profile' }) }))
+vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: 'desktop-test-profile', closure: 'desktop-test-closure' }) }))
+vi.mock('../src/runtime-closure.ts', () => ({
+  DESKTOP_RUNTIME_ARCHIVE: 'desktop-runtime.tar.zst',
+  ensureDesktopRuntime: harness.expandRuntime,
+}))
 vi.mock('../src/project-manager.ts', () => ({
   DesktopProjectManager: class {
     readonly applyRelease = harness.applyRelease
@@ -300,13 +308,39 @@ describe('desktop main startup', () => {
     expect(harness.assertProfileRuntime).toHaveBeenCalledWith('desktop-test-profile')
     expect(harness.hosts[0]).toMatchObject({
       node: join('desktop-test-resources', 'runtime', 'node', process.platform === 'win32' ? 'node.exe' : 'node'),
-      runtime: join('desktop-test-resources', 'dsh'),
+      runtime: join('desktop-test-closure', '1.0.0'),
       profile: 'desktop-test-profile',
     })
     expect(harness.hosts[0]!.start).toHaveBeenCalledTimes(1)
     expect(harness.windows).toHaveLength(1)
     expect(window.urls).toEqual(['dsh-app://shell/startup.html', 'dsh-app://app/index.html'])
     expect(invoke(DESKTOP_IPC.backendStatus)).toEqual({ phase: 'ready' })
+  })
+
+  it('expands the shipped archive into the closure and reports its progress to the loading window', async () => {
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    expect(harness.expandRuntime).toHaveBeenCalledWith(expect.objectContaining({
+      archive: join('desktop-test-resources', 'desktop-runtime.tar.zst'),
+      home: 'desktop-test-closure',
+      version: '1.0.0',
+    }))
+    expect(harness.windows[0]!.webContents.send).toHaveBeenCalledWith('dsh-desktop:backend-state', {
+      phase: 'starting',
+      runtime: { stage: 'expanding', done: 1, total: 2 },
+    })
+  })
+
+  it('leaves the failure document in place when the shipped archive cannot be expanded', async () => {
+    harness.expandRuntime.mockRejectedValueOnce(new Error('the runtime archive does not match the digest this application ships; reinstall the application'))
+    await import('../src/main.ts')
+    await harness.errorPublished.promise
+    expect(harness.hosts).toHaveLength(0)
+    expect(harness.applyRelease).not.toHaveBeenCalled()
+    expect(harness.windows[0]!.urls).toEqual(['dsh-app://shell/startup.html'])
+    const failure = invoke(DESKTOP_IPC.backendStatus) as { phase: string; message?: string }
+    expect(failure.phase).toBe('error')
+    expect(failure.message).toContain('reinstall the application')
   })
 
   it('starts the unpackaged Host from the application development directory', async () => {

@@ -9,7 +9,8 @@
  *
  * Usage: node scripts/pack-closure.mjs <closure-directory> <archive-path>
  */
-import { createWriteStream, statSync } from 'node:fs'
+import { createReadStream, createWriteStream, statSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { pipeline } from 'node:stream/promises'
 import { createZstdCompress } from 'node:zlib'
 import * as tar from 'tar'
@@ -38,4 +39,15 @@ await pipeline(
 )
 
 const bytes = statSync(archive).size
-console.log(`pack-closure: ${String(entries)} entries -> ${archive} (${(bytes / 1_048_576).toFixed(1)} MB)`)
+
+// The digest travels beside the archive inside the signed bundle, which is what
+// makes it a trustworthy reference: the application compares the archive it is
+// about to expand against this value, and compares the expanded tree against the
+// digest recorded when it was written. A tree that does not match is expanded
+// again rather than trusted.
+const digest = createHash('sha256')
+for await (const chunk of createReadStream(archive)) digest.update(chunk)
+const sha256 = digest.digest('hex')
+writeFileSync(`${archive}.sha256`, `${sha256}\n`)
+
+console.log(`pack-closure: ${String(entries)} entries -> ${archive} (${(bytes / 1_048_576).toFixed(1)} MB) sha256 ${sha256.slice(0, 12)}…`)

@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { BrowserWindow, Menu, app, dialog, ipcMain } from 'electron'
-import { CLOSURE_ARCHIVE, closureReady, ensureClosure } from './closure.js'
+import { CLOSURE_ARCHIVE, ensureClosure } from './closure.js'
 
 /** Prefix of the child's readiness record; the rest of the line is its JSON payload. */
 const READY_PREFIX = 'dsh-desktop-ready '
@@ -386,14 +386,16 @@ if (!primary) {
     // application stays in the Dock and the harness keeps working.
     created.on('close', () => { window = undefined })
     try {
-      const plan = closurePlan()
-      const expanded = plan.configured !== undefined
-        || closureReady({ archive: plan.archive, home: plan.home, version: plan.version })
-      if (!expanded) {
-        record('stdout', 'expanding the runtime closure')
-        await created.loadURL(preparingPage())
-      }
-      closure = await resolveClosure(message => { record('stdout', message) })
+      // The preparing page appears on the first thing that takes time: an
+      // expansion on first launch, or the re-expansion that follows a tree that
+      // failed its integrity check. A plain start shows nothing extra.
+      let preparing = false
+      closure = await resolveClosure((message) => {
+        record('stdout', message)
+        if (preparing) return
+        preparing = true
+        void created.loadURL(preparingPage())
+      })
       readiness = await startHarness(closure)
       await created.loadURL(readiness.url)
     } catch (error) {

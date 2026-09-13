@@ -38,6 +38,13 @@ extraResources:
     to: closure.tar.zst
     filter:
       - '**/*'
+  # The digest the application checks the archive and the expanded tree against.
+  # It travels inside the signed bundle, which is what makes it a reference
+  # rather than another value an attacker would rewrite with the archive.
+  - from: ../../build/out/closure.tar.zst.sha256
+    to: closure.tar.zst.sha256
+    filter:
+      - '**/*'
 
 mac:
   category: public.app-category.developer-tools

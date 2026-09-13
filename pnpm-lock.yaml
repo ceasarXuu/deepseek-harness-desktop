@@ -453,6 +453,55 @@ importers:
         specifier: workspace:^
         version: link:../../../packages/bundle/web-app
 
+  desktop/packages/plugin-store:
+    dependencies:
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:^
+        version: link:../../../packages/util/home-paths
+      '@deepseek-ai/dsh-mcp-client':
+        specifier: workspace:^
+        version: link:../../../packages/mcp/mcp-client
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: workspace:^
+        version: link:../../../packages/host/webserver
+
+  desktop/packages/ui-plugin-store:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:^
+        version: link:../../../packages/client/locale
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: workspace:^
+        version: link:../../../packages/client/runtime
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:^
+        version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:^
+        version: link:../../../packages/client/ui-settings
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:^
+        version: link:../../../packages/client/ui-slots
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
+
   desktop/runtime-closure:
     dependencies:
       '@deepseek-ai/cordis':
@@ -695,6 +744,12 @@ importers:
       '@deepseek-ai/dsh-desktop-app':
         specifier: workspace:^
         version: link:../packages/bundle-desktop-app
+      '@deepseek-ai/dsh-desktop-plugin-store':
+        specifier: workspace:^
+        version: link:../packages/plugin-store
+      '@deepseek-ai/dsh-desktop-ui-plugin-store':
+        specifier: workspace:^
+        version: link:../packages/ui-plugin-store
       '@deepseek-ai/dsh-fs':
         specifier: workspace:^
         version: link:../../packages/fs/fs

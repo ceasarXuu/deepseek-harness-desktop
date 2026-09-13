@@ -109,6 +109,7 @@
   ],
   "references": [
     { "path": "./desktop/packages/bundle-desktop-app" },
+    { "path": "./desktop/packages/plugin-store" },
     { "path": "./vendor/cosmokit" },
     { "path": "./vendor/schemastery" },
     { "path": "./vendor/cordis" },

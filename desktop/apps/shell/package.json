@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-desktop-shell",
   "description": "The desktop application: Electron shell that supervises a harness child and presents its interface",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "main": "lib/main.js",

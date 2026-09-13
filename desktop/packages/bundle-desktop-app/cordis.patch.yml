@@ -35,3 +35,14 @@
     # has settled, which is how the shell learns where to point its window.
     - id: desktop-runtime
       name: '@deepseek-ai/dsh-desktop-app'
+
+    # The runtime plugin store: installs plugin bundles from a file or a URL,
+    # mounts each one as its own MCP server process, and serves the Plugins
+    # panel. It is the only row here that changes at run time.
+    - id: desktop-plugin-store
+      name: '@deepseek-ai/dsh-desktop-plugin-store'
+
+    # The panel itself: a browser plugin contributing the Installed tab to Web
+    # Settings, which drives the store's own routes.
+    - id: desktop-ui-plugin-store
+      name: '@deepseek-ai/dsh-desktop-ui-plugin-store'

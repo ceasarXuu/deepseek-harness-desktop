@@ -13,7 +13,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -138,6 +138,27 @@ function countFiles(dir) {
   return total
 }
 
+/**
+ * Directories a repaired package must not contribute.
+ *
+ * A repair copies a package from this workspace, where its development tree
+ * still exists: `node_modules` (the deploy already hoisted every runtime
+ * dependency to the closure root, so a package's own tree would duplicate it)
+ * and the test suite. Left in, they are the difference between a closure of a
+ * few hundred megabytes and one of two gigabytes.
+ */
+const REPAIR_EXCLUDED_DIRECTORIES = new Set(['node_modules', 'tests', '.git'])
+
+/** Copy a workspace package into the closure without its development tree. */
+function copyRepairedPackage(source, destination) {
+  cpSync(source, destination, {
+    recursive: true,
+    dereference: true,
+    force: true,
+    filter: from => !REPAIR_EXCLUDED_DIRECTORIES.has(basename(from)),
+  })
+}
+
 console.log(`build-closure: deploying ${manifest.name} to ${destination}`)
 rmSync(destination, { recursive: true, force: true })
 // A previous run's deploy (or its own) leaves the workspace install state where
@@ -165,7 +186,7 @@ for (const name of declared) {
   if (present().has(short)) continue
   const source = index.get(name)
   if (source === undefined) fail(`${name} is declared but neither deployed nor present in this workspace`)
-  cpSync(source, join(scopeDir, short), { recursive: true, dereference: true, force: true })
+  copyRepairedPackage(source, join(scopeDir, short))
   repaired++
 }
 if (repaired > 0) console.log(`build-closure: repaired ${String(repaired)} declared package(s) the deploy omitted`)

@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('dshShell', {
   readRuntimeLog: () => ipcRenderer.invoke('runtime-log:read'),
   /** The application version, shown by the About surface. */
   appVersion: () => ipcRenderer.invoke('app:version'),
+  /** Ask the shell for a plugin bundle file; resolves null when cancelled. */
+  pickPluginBundle: () => ipcRenderer.invoke('plugins:pick-bundle'),
   /** Subscribe to runtime-log lines as the harness writes them. */
   onRuntimeLog: (listener) => {
     const handler = (_event, line) => { listener(line) }

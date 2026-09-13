@@ -1,7 +1,7 @@
 {
   "name": "dsh-desktop-runtime-pkg",
   "description": "Dependency-only deploy root defining the desktop application's runtime closure; pnpm deploy materializes this manifest and node_modules.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -85,6 +85,8 @@
     "@deepseek-ai/dsh-credentials": "workspace:^",
     "@deepseek-ai/dsh-credentials-local": "workspace:^",
     "@deepseek-ai/dsh-desktop-app": "workspace:^",
+    "@deepseek-ai/dsh-desktop-plugin-store": "workspace:^",
+    "@deepseek-ai/dsh-desktop-ui-plugin-store": "workspace:^",
     "@deepseek-ai/dsh-fs": "workspace:^",
     "@deepseek-ai/dsh-fs-local": "workspace:^",
     "@deepseek-ai/dsh-fs-observation-policy": "workspace:^",

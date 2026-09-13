@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-desktop-app",
   "description": "The desktop distribution's bundle: the patch layer over dsh-base and dsh-web-app, the desktop runtime glue, and the packaged entry that boots a frozen closure",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "main": "lib/index.js",

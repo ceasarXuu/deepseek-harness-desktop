@@ -41,7 +41,9 @@ The list is deliberately short and every entry is an additive list insertion, no
 | [`pnpm-workspace.yaml`](../pnpm-workspace.yaml) | Add `desktop/*` and `desktop/apps/*` to `packages` | Workspace membership is what makes the shell and the new packages resolvable and covered by the dependency checks |
 | [`tsdown.config.ts`](../tsdown.config.ts) | Add `desktop/packages/*/*` to `workspace` | The build runs per package over an explicit workspace glob, so a package outside it is never built and never lands in the closure |
 | [`tsconfig.base.json`](../tsconfig.base.json) | Append `./desktop/packages/*/src` and `./desktop/apps/*/src` to the existing `@deepseek-ai/dsh-*` path array | The path map is what lets workspace imports resolve to source rather than to built output, and its arrays are explicit directory lists |
-| [`tsconfig.host.json`](../tsconfig.host.json) | Add a glob covering desktop package sources and tests | This face's `include` seeds the program that typechecks the host side, and desktop packages are not reachable by import from anything already listed |
+| [`tsconfig.host.json`](../tsconfig.host.json) | Add a glob covering desktop package sources and tests, and a project reference per desktop host package | This face's `include` seeds the program that typechecks the host side, and desktop packages are not reachable by import from anything already listed |
+| [`tsconfig.client.json`](../tsconfig.client.json) | Add a project reference to the desktop browser surface | The client aggregate compiles browser packages through explicit references, and the Plugins panel is one |
+| [`vitest.config.ts`](../vitest.config.ts) | Add `desktop/packages/*/tests/**/*.spec.ts` to `testIncludes` | The runner's include list is explicit; without it the subtree's tests exist but never run |
 
 Everything else the desktop application needs is a new file: the shell, the bundle, the closure manifest, the build configuration, the release workflow, the Agent Notes, and this documentation.
 
@@ -100,3 +102,4 @@ All three reuse whatever closure exists, because the closure is the slow step an
 | Version | Status | Target | Docs |
 |---|---|---|---|
 | 0.0.1 | Proposed | macOS (Apple Silicon) | [`docs/releases/v0.0.1`](docs/releases/v0.0.1/README.md) |
+| 0.0.2 | Proposed | macOS (Apple Silicon) | [`docs/releases/v0.0.2`](docs/releases/v0.0.2/README.md) |

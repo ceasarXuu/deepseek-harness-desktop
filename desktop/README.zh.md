@@ -41,7 +41,9 @@ harness 本身位于 [`packages/`](../packages/README.md) 与 [`apps/cli`](../ap
 | [`pnpm-workspace.yaml`](../pnpm-workspace.yaml) | 在 `packages` 中加入 `desktop/*` 与 `desktop/apps/*` | workspace 成员资格是应用与新包可解析、并被依赖检查覆盖的前提 |
 | [`tsdown.config.ts`](../tsdown.config.ts) | 在 `workspace` 中加入 `desktop/packages/*/*` | 构建按显式 workspace glob 逐包进行，不在其中的包永远不会被构建，也不会进入闭包 |
 | [`tsconfig.base.json`](../tsconfig.base.json) | 在既有 `@deepseek-ai/dsh-*` 路径数组中追加 `./desktop/packages/*/src` 与 `./desktop/apps/*/src` | 路径映射决定 workspace 导入解析到源码而非构建产物，而它的数组是显式目录列表 |
-| [`tsconfig.host.json`](../tsconfig.host.json) | 增加覆盖桌面包源码与测试的 glob | 该编译面的 `include` 决定为宿主侧做类型检查的程序，而桌面包无法从列表中任何已有条目经导入到达 |
+| [`tsconfig.host.json`](../tsconfig.host.json) | 增加覆盖桌面包源码与测试的 glob，并为每个 desktop 宿主包增加一条 project reference | 该编译面的 `include` 决定为为宿主侧做类型检查的程序，而桌面包无法从列表中任何已有条目经导入到达 |
+| [`tsconfig.client.json`](../tsconfig.client.json) | 增加指向 desktop 浏览器界面的 project reference | 客户端聚合通过显式 references 编译浏览器包，而插件面板正是其中之一 |
+| [`vitest.config.ts`](../vitest.config.ts) | 在 `testIncludes` 中加入 `desktop/packages/*/tests/**/*.spec.ts` | 运行器的 include 列表是显式的；不加则子树里的测试存在但从不运行 |
 
 桌面应用需要的其他一切均为新文件：应用、组合包、闭包 manifest、构建配置、发布工作流、Agent Note，以及本文档。
 
@@ -100,3 +102,4 @@ ditto "desktop/apps/shell/dist/mac-arm64/DeepSeek Harness.app" "/Applications/De
 | 版本 | 状态 | 目标 | 文档 |
 |---|---|---|---|
 | 0.0.1 | 提案中 | macOS（Apple Silicon） | [`docs/releases/v0.0.1`](docs/releases/v0.0.1/README.md) |
+| 0.0.2 | 提案中 | macOS（Apple Silicon） | [`docs/releases/v0.0.2`](docs/releases/v0.0.2/README.md) |

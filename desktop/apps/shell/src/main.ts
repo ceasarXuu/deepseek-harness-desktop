@@ -311,6 +311,16 @@ function installMenu(): void {
 
 ipcMain.handle('runtime-log:read', () => log.join('\n'))
 ipcMain.handle('app:version', () => app.getVersion())
+// The Plugins panel installs a bundle the user picked; the panel itself cannot
+// open a file dialog, so the shell answers with a path and nothing else.
+ipcMain.handle('plugins:pick-bundle', async (): Promise<string | null> => {
+  const chosen = await dialog.showOpenDialog({
+    title: 'Choose a plugin bundle',
+    properties: ['openFile'],
+    filters: [{ name: 'Plugin bundles', extensions: ['mcpb', 'dxt', 'zip'] }],
+  })
+  return chosen.canceled ? null : chosen.filePaths[0] ?? null
+})
 
 // One application instance per machine: the harness holds process-local state and
 // binds a port, so a second copy would interleave session writes for no benefit.

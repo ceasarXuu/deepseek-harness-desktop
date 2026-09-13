@@ -13,7 +13,12 @@
 
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { boot, composeEntries, installFailLoud, loadEnv, loadOptionalPatches } from '@deepseek-ai/dsh-app-boot'
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { boot, composeEntries, healProfilesModuleFallback, initProfile, installFailLoud, loadEnv, loadOptionalPatches, watchUserPatches } from '@deepseek-ai/dsh-app-boot'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import type { Context } from '@deepseek-ai/cordis'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 
@@ -26,9 +31,6 @@ const NAME = 'dsh-desktop'
  * from `dsh-web-app` rather than being restated.
  */
 const BUNDLES = ['dsh-base', 'dsh-web-app', 'dsh-desktop-app'] as const
-
-/** Where the shipped root configuration sits, relative to the built entry. */
-const CONFIG_RELATIVE_PATH = '../config/cordis.yml'
 
 /**
  * The shipped agent-preset roster, relative to the built entry.
@@ -118,6 +120,53 @@ function loadBundlePatch(entryUrl: string, bundle: string): PatchOptions[] {
 }
 
 /**
+ * The profile this application installs into, and the patches that compose it.
+ *
+ * A desktop user has no terminal, so the profile is the application's own: it
+ * is where a plugin installed from the interface lands, and it is the module
+ * resolution base — a bare specifier in a composition row resolves from here,
+ * then from the flat fallback directory beside it, and the fallback is what
+ * makes the packages the application already carries reachable. Without a base
+ * of its own, an installed plugin could never resolve the framework it shares
+ * with the host, which is the whole reason the closure is an ordinary
+ * directory rather than an archive.
+ *
+ * The fallback is healed from the CLOSURE's manifest rather than from the
+ * launcher's: the closure is the list of everything this application carries,
+ * including the packages only the desktop composition mounts.
+ */
+interface DesktopProfile {
+  /** The profile directory, which also holds installed plugins. */
+  directory: string
+  /** The root config file bare specifiers resolve against. */
+  rootConfig: string
+  /** Patch layers the user owns: the profile's own file, then the harness home's. */
+  userPatches: PatchOptions[]
+  /** The files those patches came from, for live reconciliation. */
+  userPatchFiles: string[]
+}
+
+/**
+ * Prepare the profile: create it when absent, heal the fallback, read the user layers.
+ * @param entryUrl - this module's URL, the anchor for the closure it runs inside.
+ * @param home - the harness home.
+ * @returns the profile description.
+ */
+function prepareDesktopProfile(entryUrl: string, home: string): DesktopProfile {
+  const directory = join(home, 'profiles', 'desktop')
+  initProfile(directory, [])
+  // The root include needs a real file to anchor resolution at; the CLI writes
+  // the same empty list for the same reason.
+  const rootConfig = join(directory, 'cordis.yml')
+  writeFileSync(rootConfig, '[]\n')
+  const closureManifest = fileURLToPath(new URL('../../../../package.json', entryUrl))
+  healProfilesModuleFallback(closureManifest, home)
+  const userPatchFiles = [join(directory, 'cordis.patch.yml'), join(home, 'cordis.patch.yml')]
+  const userPatches = userPatchFiles.flatMap(file => loadOptionalPatches(NAME, file) ?? [])
+  return { directory, rootConfig, userPatches, userPatchFiles }
+}
+
+/**
  * Boot the desktop composition and own process exit.
  * @param entryUrl - this module's URL, used as the base for bare-specifier
  * resolution so plugins come from the closure rather than from the caller.
@@ -128,10 +177,13 @@ export async function runDesktopHarness(entryUrl: string): Promise<void> {
   loadEnv(NAME)
 
   const layers = BUNDLES.flatMap(bundle => loadBundlePatch(entryUrl, bundle))
-  const patches = [...layers, ...launcherOverlays(layers, entryUrl)]
-  const configPath = fileURLToPath(new URL(CONFIG_RELATIVE_PATH, entryUrl))
+  const home = resolveDshHome()
+  const profile = prepareDesktopProfile(entryUrl, home)
+  // The launcher's own overlays sit above the shipped layers and below the
+  // user's, so a user patch can override any row the application ships.
+  const patches = [...layers, ...launcherOverlays(layers, entryUrl), ...profile.userPatches]
 
-  const ctx = await boot(NAME, configPath, patches, (hostCtx) => {
+  const ctx = await boot(NAME, profile.rootConfig, patches, (hostCtx) => {
     // The web-startup row parses the command line and the transport rows inject
     // the service it provides. An embedding host contributes no arguments: the
     // desktop patch states the bind configuration in the composition instead.
@@ -141,7 +193,13 @@ export async function runDesktopHarness(entryUrl: string): Promise<void> {
         void ctx.fiber.dispose().finally(() => process.exit(code))
       },
     })
-  }, entryUrl)
+  }, pathToFileURL(profile.rootConfig).href)
+
+  // The user's layers are watched, as they are under the command-line
+  // launcher: editing one hot-applies instead of requiring a restart.
+  for (const file of profile.userPatchFiles) {
+    void watchUserPatches(ctx as Context, { binName: NAME, filename: file }).catch(() => {})
+  }
 
   // The shell supervises this process: it disposes the tree on a stop request
   // so persistence drains, rather than leaving the log truncated at the point

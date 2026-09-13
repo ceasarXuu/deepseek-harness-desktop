@@ -9,9 +9,6 @@
   ],
   "references": [
     {
-      "path": "../../../vendor/cordis"
-    },
-    {
       "path": "../../../packages/boot/app-boot"
     },
     {
@@ -19,6 +16,12 @@
     },
     {
       "path": "../../../packages/host/webserver"
+    },
+    {
+      "path": "../../../packages/util/home-paths"
+    },
+    {
+      "path": "../../../vendor/cordis"
     },
     {
       "path": "../../../vendor/loader"

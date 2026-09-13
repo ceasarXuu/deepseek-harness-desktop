@@ -450,6 +450,9 @@ importers:
       '@deepseek-ai/dsh-cmdline':
         specifier: workspace:^
         version: link:../../../packages/boot/cmdline
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:^
+        version: link:../../../packages/util/home-paths
       '@deepseek-ai/dsh-web-app':
         specifier: workspace:^
         version: link:../../../packages/bundle/web-app

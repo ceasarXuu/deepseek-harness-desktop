@@ -73,12 +73,12 @@ harness 本身位于 [`packages/`](../packages/README.md) 与 [`apps/cli`](../ap
 
 三档成本，对应三类改动。
 
-**直接从源码树运行。** 外壳从 `DSH_DESKTOP_CLOSURE` 读取运行时位置，因此改动外壳或桌面组合包完全不需要打包。该值就是存放 `harness.asar` 的目录，即打包应用 `Resources` 里的内容：
+**直接从源码树运行。** 外壳从 `DSH_DESKTOP_CLOSURE` 读取运行时位置，因此改动外壳或桌面组合包完全不需要打包。该值就是构建留下的实体闭包目录；打包后的应用会把同一个树从它携带的归档里解到 harness home，再让外壳指向那里：
 
 ```sh
 pnpm --filter @deepseek-ai/dsh-desktop-app run build
 pnpm --filter @deepseek-ai/dsh-desktop-shell run build
-DSH_DESKTOP_CLOSURE="$PWD/desktop/build/out" \
+DSH_DESKTOP_CLOSURE="$PWD/desktop/build/out/closure" \
   ./desktop/apps/shell/node_modules/.bin/electron desktop/apps/shell
 ```
 
@@ -95,7 +95,7 @@ ditto "desktop/apps/shell/dist/mac-arm64/DeepSeek Harness.app" "/Applications/De
 
 **构建交付物。** `node desktop/build/package-app.mjs` 产出 DMG 与 ZIP，并使用钥匙串中的身份签名。加上 `DSH_DESKTOP_NOTARIZE=1` 并在环境中提供公证凭据，产出的就是发布所用的东西。
 
-三者都复用已有的闭包，因为闭包是最慢的一步、也是变化最少的一步。因此一旦构建过一次，就相当于隐含了 `--skip-closure`；改动 harness 包后要强制重建，删除 `desktop/build/out/harness.asar` 即可。
+三者都复用已有的闭包，因为闭包是最慢的一步、也是变化最少的一步。因此一旦构建过一次，就相当于隐含了 `--skip-closure`；改动 harness 包后要强制重建，删除 `desktop/build/out/closure.tar.zst` 即可。
 
 ## 发布
 

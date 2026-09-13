@@ -17,6 +17,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { BrowserWindow, Menu, app, dialog, ipcMain } from 'electron'
+import { CLOSURE_ARCHIVE, closureReady, ensureClosure } from './closure.js'
 
 /** Prefix of the child's readiness record; the rest of the line is its JSON payload. */
 const READY_PREFIX = 'dsh-desktop-ready '
@@ -36,25 +37,13 @@ const CLOSURE_ENV = 'DSH_DESKTOP_CLOSURE'
 /**
  * Entry point inside the closure, relative to the closure root.
  *
- * The closure ships as one archive rather than a loose package tree, so this
- * path crosses into it. Electron's patched `fs` reads it transparently, which is
- * what lets the harness's Loader resolve plugins by bare name from inside the
- * archive; the files it cannot read from there — native addons and the
- * executables it spawns — sit in the sibling `.asar.unpacked` directory.
+ * The closure is an ordinary package tree on disk: the application carries it
+ * as one compressed archive and expands it into the harness home before the
+ * first launch, so every path the harness resolves — a plugin's bare
+ * specifier, a client bundle, a native addon, a spawned executable — is a real
+ * path. See `closure.ts`.
  */
-const ENTRY_RELATIVE_PATH = 'harness.asar/node_modules/@deepseek-ai/dsh-desktop-app/lib/entry.js'
-
-/**
- * The PTY spawn helper, inside the archive's unpacked sibling directory.
- *
- * `node-pty` launches this helper and locates it beside the prebuilt addon it
- * loaded, which is a path inside the archive; a process launch cannot execute
- * one, so the shell names the real file for the child instead. The variable is
- * the override [`patches/node-pty@1.1.0.patch`](../../../patches/node-pty@1.1.0.patch)
- * reads before falling back to that path. A development run boots from a loose
- * closure, where the fallback is already a real path and this file is absent.
- */
-const PTY_HELPER_RELATIVE_PATH = `harness.asar.unpacked/node_modules/node-pty/prebuilds/${process.platform}-${process.arch}/spawn-helper`
+const ENTRY_RELATIVE_PATH = 'node_modules/@deepseek-ai/dsh-desktop-app/lib/entry.js'
 
 /** One readiness payload, as the desktop bundle reports it. */
 interface Readiness {
@@ -69,22 +58,54 @@ type HarnessChild = ChildProcessByStdio<null, Readable, Readable>
 let child: HarnessChild | undefined
 let window: BrowserWindow | undefined
 let readiness: Readiness | undefined
+let closure: string | undefined
 let stopping = false
 const log: string[] = []
 
+/** The harness home: sessions, settings, credentials, plugins, and the closure. */
+function harnessHome(): string {
+  return join(app.getPath('userData'), 'harness')
+}
+
+/** The closure archive the application ships. */
+function closureArchive(): string {
+  return join(process.resourcesPath, CLOSURE_ARCHIVE)
+}
+
 /**
- * Locate the directory the closure sits in.
- *
- * A packaged application ships it beside the other resources. A development run
- * names the build output directory through the environment, because the closure
- * is a build artifact and the shell cannot derive it from its own position in
- * the source tree.
- * @returns the absolute directory containing `harness.asar`.
+ * The options that name one closure: a development run points at a tree it
+ * built, and every other run at the archive the application carries.
+ * @returns the version key and the archive path, or the configured tree.
  */
-function resolveClosureDir(): string {
+function closurePlan(): { configured?: string; version: string; archive: string; home: string } {
   const configured = process.env[CLOSURE_ENV]
-  if (configured !== undefined && configured !== '') return configured
-  return process.resourcesPath
+  const home = harnessHome()
+  const version = app.getVersion()
+  return {
+    ...(configured === undefined || configured === '' ? {} : { configured }),
+    version,
+    archive: closureArchive(),
+    home,
+  }
+}
+
+/**
+ * Locate the closure, expanding the shipped archive on first launch.
+ *
+ * A development run names a tree through the environment instead: the closure
+ * is a build artifact, and the shell cannot derive its position from its own.
+ * @param onProgress - reports extraction steps to a window that is already up.
+ * @returns the absolute path of the closure directory.
+ */
+async function resolveClosure(onProgress: (message: string) => void): Promise<string> {
+  const plan = closurePlan()
+  if (plan.configured !== undefined) return plan.configured
+  return await ensureClosure({
+    archive: plan.archive,
+    home: plan.home,
+    version: plan.version,
+    onProgress,
+  })
 }
 
 /**
@@ -119,26 +140,21 @@ function record(stream: 'stdout' | 'stderr', line: string): void {
  * The child is this process re-entered as Node, which keeps one binary and one
  * signature in the bundle. `--expose-internals` is what lets the Loader resolve
  * bare plugin specifiers; without it the tree does not mount at all.
+ * @param closureDirectory - the extracted closure the child boots from.
  * @returns the child's readiness record.
  */
-function startHarness(): Promise<Readiness> {
-  const closureDir = resolveClosureDir()
-  const entry = join(closureDir, ENTRY_RELATIVE_PATH)
+function startHarness(closureDirectory: string): Promise<Readiness> {
+  const entry = join(closureDirectory, ENTRY_RELATIVE_PATH)
   if (!existsSync(entry)) throw new Error(`harness entry not found at ${entry}`)
-  const ptyHelper = join(closureDir, PTY_HELPER_RELATIVE_PATH)
 
   const spawned = spawn(process.execPath, ['--expose-internals', entry], {
     env: {
       ...process.env,
       PATH: loginShellPath(),
-      DSH_HOME: join(app.getPath('userData'), 'harness'),
+      DSH_HOME: harnessHome(),
       DSH_TELEMETRY_DISABLED: '1',
       DSH_DESKTOP_VERSION: app.getVersion(),
       ELECTRON_RUN_AS_NODE: '1',
-      // Only in a packaged run: a loose closure has no archive for the helper
-      // to be outside of, and pointing node-pty at a path that is not there
-      // fails every terminal the way the archive path did.
-      ...(existsSync(ptyHelper) ? { DSH_NODE_PTY_SPAWN_HELPER: ptyHelper } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     cwd: app.getPath('home'),
@@ -224,12 +240,41 @@ async function stopHarness(): Promise<void> {
   clearTimeout(timer)
 }
 
+/**
+ * The page the window shows while the closure expands on first launch.
+ *
+ * Expansion writes seventeen thousand files, and hiding the window until it
+ * finishes would look like a launch that failed. It happens once per shipped
+ * closure, so this is the whole of the first-run experience.
+ * @returns a data URL holding the page.
+ */
+function preparingPage(): string {
+  const html = `<!doctype html>
+<meta charset="utf-8">
+<title>DeepSeek Harness</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; height: 100vh; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center;
+         font: 13px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; color: #6b6b6b; background: #fafafa; }
+  @media (prefers-color-scheme: dark) { body { color: #9a9a9a; background: #1e1e1e; } }
+  .spinner { width: 22px; height: 22px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%;
+             animation: spin 0.9s linear infinite; opacity: 0.6; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  p { margin: 0; }
+</style>
+<div class="spinner"></div>
+<p>Preparing the runtime…</p>
+<p>This happens once after an install or an update.</p>`
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+}
+
 /** Stop the current child, then start and attach a new one. */
 async function restartHarness(): Promise<void> {
   await stopHarness()
   stopping = false
   try {
-    readiness = await startHarness()
+    closure ??= await resolveClosure(message => { record('stdout', message) })
+    readiness = await startHarness(closure)
     await window?.loadURL(readiness.url)
   } catch (error) {
     await dialog.showMessageBox({ type: 'error', title: 'DeepSeek Harness', message: String(error) })
@@ -341,7 +386,15 @@ if (!primary) {
     // application stays in the Dock and the harness keeps working.
     created.on('close', () => { window = undefined })
     try {
-      readiness = await startHarness()
+      const plan = closurePlan()
+      const expanded = plan.configured !== undefined
+        || closureReady({ archive: plan.archive, home: plan.home, version: plan.version })
+      if (!expanded) {
+        record('stdout', 'expanding the runtime closure')
+        await created.loadURL(preparingPage())
+      }
+      closure = await resolveClosure(message => { record('stdout', message) })
+      readiness = await startHarness(closure)
       await created.loadURL(readiness.url)
     } catch (error) {
       await dialog.showMessageBox({

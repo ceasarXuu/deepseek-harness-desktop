@@ -1,7 +1,7 @@
 {
   "name": "dsh-desktop-runtime-pkg",
   "description": "Dependency-only deploy root defining the desktop application's runtime closure; pnpm deploy materializes this manifest and node_modules.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "type": "module",
   "dependencies": {

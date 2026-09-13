@@ -129,15 +129,6 @@ function prune(dir) {
   return removed
 }
 
-/** Count files under `dir`, for reporting what a directory removal took with it. */
-function countFiles(dir) {
-  let total = 0
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    total += entry.isDirectory() ? countFiles(join(dir, entry.name)) : 1
-  }
-  return total
-}
-
 /**
  * Directories a repaired package must not contribute.
  *
@@ -208,53 +199,33 @@ const thinned = prune(destination)
 const missing = declared.filter(name => !present().has(name.slice('@deepseek-ai/'.length)))
 if (missing.length > 0) fail(`closure is incomplete, missing: ${missing.join(', ')}`)
 
-// ── pack: one archive instead of tens of thousands of files ─────────────────
+// ── pack: one compressed archive, expanded on first launch ──────────────────
 //
 // The installer's cost is file count, not bytes: Finder enumerates the whole
 // bundle before it copies any of it, so a closure staged as loose files makes
-// installation slow and looks nothing like a normal Electron application. The
-// archive is read through Electron's patched `fs`, which the harness's Loader
-// path exercises — `internal.import(name, baseUrl)` resolves bare specifiers
-// inside an asar, while Node's default ESM resolver does not, and the Loader is
-// the only party that resolves plugins.
+// installation slow. It therefore ships as one archive, and the application
+// expands it into the harness home before its first launch, where it is an
+// ordinary package tree again — which is what lets a plugin installed at run
+// time resolve the framework packages the host already has. Producer and
+// consumer live together in `desktop/apps/shell`, so the format cannot drift.
 //
-// Two kinds of file cannot live in the archive: native addons, which the loader
-// cannot `dlopen` from it, and executables the harness spawns. `--unpack`
-// excludes them from the archive so the reads fall through to the sibling
-// `.asar.unpacked` directory, which is the same mechanism electron-builder's
-// `asarUnpack` uses.
-const archive = join(dirname(destination), 'harness.asar')
-const unpacked = `${archive}.unpacked`
+// The materialized tree stays on disk: development runs point at it directly
+// through `DSH_DESKTOP_CLOSURE`, and nothing needs an unpacking step.
+const archive = join(dirname(destination), 'closure.tar.zst')
 rmSync(archive, { force: true })
-rmSync(unpacked, { recursive: true, force: true })
-// The deploy above left the workspace's install state where pnpm's deps-status
-// check wants to purge node_modules and refuses to without a TTY. Restore it
-// before invoking anything through pnpm.
-run('pnpm', ['install', '--frozen-lockfile'])
-// One expression, not several: `--unpack` is an overwriting option, so a second
-// flag silently discards the first and only the last pattern survives. The brace
-// alternation keeps every rule in the single value the option accepts.
-//
-// The options also precede the positionals, where commander parses them; a
-// trailing `--unpack` is ignored entirely.
-run('pnpm', [
-  '--filter', '@deepseek-ai/dsh-desktop-shell', 'exec', 'asar', 'pack',
-  '--unpack', '**/{*.node,*.dylib,*.so,spawn-helper,rg,landlock-run}',
-  destination, archive,
-])
-if (!existsSync(unpacked)) fail(`no unpacked directory was produced at ${unpacked}`)
+run('node', [join(repo, 'desktop/apps/shell/scripts/pack-closure.mjs'), destination, archive])
 if (!existsSync(archive)) fail(`packing produced no archive at ${archive}`)
-const unpackedFiles = existsSync(unpacked) ? countFiles(unpacked) : 0
 const packageCount = present().size
-// The staging tree is build residue once the archive holds it, and it has to go
-// after every count that reads it.
-rmSync(destination, { recursive: true, force: true })
+// The deploy above left the workspace's install state where pnpm's deps-status
+// check wants to purge node_modules and refuses to without a TTY. Restoring it
+// is what keeps this script runnable on its own.
+run('pnpm', ['install', '--frozen-lockfile'])
 
 console.log(
   `build-closure: ${String(packageCount)} scoped packages, ${String(materialized)} path(s) materialized, `
   + `${String(repaired)} repaired, 0 symlinks, ${String(thinned)} non-runtime file(s) pruned`,
 )
 console.log(
-  `build-closure: packed to ${archive} with ${String(unpackedFiles)} unpacked file(s); `
+  `build-closure: packed to ${archive}; tree kept at ${destination} for development runs; `
   + `all ${String(declared.length)} declared dependencies present`,
 )

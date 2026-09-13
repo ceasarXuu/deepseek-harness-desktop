@@ -24,25 +24,18 @@ publish:
 files:
   - lib/**/*
   - package.json
+  # The shell expands the closure itself, so its own runtime dependencies travel
+  # with it inside `app.asar`.
+  - node_modules/**/*
 
 extraResources:
-  # The closure is one archive plus the files that cannot be read from inside it.
+  # The closure is one compressed archive, and it is the only thing the installer
+  # carries for it: the application expands it into the harness home before its
+  # first launch, where it is an ordinary package tree (see `src/closure.ts`).
   # Staging it as loose files instead means tens of thousands of small files,
   # which Finder enumerates in full before it copies any of them.
-  #
-  # `harness.asar` is named as a file rather than a directory for a second
-  # reason: app-builder-lib's filter refuses any directory literally named
-  # `node_modules` at the root of a `from` source, and a closure is almost
-  # entirely node_modules.
-  - from: ../../build/out/harness.asar
-    to: harness.asar
-    filter:
-      - '**/*'
-  # The same rule applies one level down: naming `harness.asar.unpacked` as the
-  # source root puts its first child at `node_modules`, which the filter refuses.
-  # Naming that child as the root keeps the relative path clear of the rule.
-  - from: ../../build/out/harness.asar.unpacked/node_modules
-    to: harness.asar.unpacked/node_modules
+  - from: ../../build/out/closure.tar.zst
+    to: closure.tar.zst
     filter:
       - '**/*'
 

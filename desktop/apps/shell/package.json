@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-desktop-shell",
   "description": "The desktop application: Electron shell that supervises a harness child and presents its interface",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "type": "module",
   "main": "lib/main.js",
@@ -10,8 +10,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "license": "MIT",
+  "dependencies": {
+    "tar": "^7.5.22"
+  },
   "devDependencies": {
-    "@electron/asar": "^3.4.1",
     "@types/node": "^22.20.0",
     "electron": "^44.3.0",
     "electron-builder": "^26.0.0",

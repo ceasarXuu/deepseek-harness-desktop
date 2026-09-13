@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-13-runtime-plugin-bundles.md
 2026-09-13-runtime-plugin-bundles.md: 6b67eda0aa9e610b375fd4b2c81d0c6e045f7b15
-2026-09-13-runtime-plugin-bundles.zh.md: cc322616773ce69b5d8820e66a8088345ec1deca
+2026-09-13-runtime-plugin-bundles.zh.md: fab9a2c621ad8c0bb01429e9b093089c48e6a005

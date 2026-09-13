@@ -4,13 +4,13 @@
 
 DeepSeek Harness 的桌面发行版：一个已签名、自包含的 macOS 应用，无需终端、无需系统 Node.js，也无需单独启动任何服务，即可运行 harness 及其浏览器界面。
 
-harness 本身位于 [`packages/`](../packages/README.md) 与 [`apps/cli`](../apps/cli/README.md)，本子树不改动它。`desktop/` 只负责打包层与应用层，把组合好的 harness 变成可安装的应用。
+harness 本身位于 [`packages/`](../packages/README.zh.md) 与 [`apps/cli`](../apps/cli/README.zh.md)，本子树不改动它。`desktop/` 只负责打包层与应用层，把组合好的 harness 变成可安装的应用。
 
 ## 目录结构
 
 | 路径 | 职责 |
 |---|---|
-| [`docs/releases/`](docs/releases/README.md) | 按版本规划：某个已发布桌面版本的范围、架构、打包、分发与风险 |
+| [`docs/releases/`](docs/releases/README.zh.md) | 按版本规划：某个已发布桌面版本的范围、架构、打包、分发与风险 |
 | `apps/shell/` | Electron 应用：主进程、preload、窗口生命周期、harness 监管、原生对话框、更新器 |
 | `packages/bundle-desktop-app/` | 组合启动的 Cordis 组合包：`@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之上的补丁层、桌面运行时粘合层，以及打包入口 |
 | `runtime-closure/` | 纯依赖的部署根目录，其闭包即打包应用实际交付的内容。与 `python/sdk-runtime` 一样，仅为依赖解析而加入工作区 |
@@ -18,13 +18,13 @@ harness 本身位于 [`packages/`](../packages/README.md) 与 [`apps/cli`](../ap
 
 ## 与 harness 的关系
 
-桌面应用是一种组合，而非 fork。它通过 [`packages/boot/app-boot`](../packages/boot/app-boot/README.md) 中同一个 `boot()` 入口，启动与 `dsh --profile web` 相同的插件树，区别只在于使用冻结的依赖闭包，而不是 profile 目录。
+桌面应用是一种组合，而非 fork。它通过 [`packages/boot/app-boot`](../packages/boot/app-boot/README.zh.md) 中同一个 `boot()` 入口，启动与 `dsh --profile web` 相同的插件树，区别只在于使用冻结的依赖闭包，而不是 profile 目录。
 
 有三条 harness 约定塑造了此处的全部设计决策，它们各自由所属包负责，而非本子树：
 
 - 裸包名插件解析需要 Loader 访问内部模块（[`vendor/loader/src/internal.ts`](../vendor/loader/src/internal.ts)）。
-- 默认持久化后端会立即导入 `node:zlib` 的 zstd，会话搜索索引则导入 `node:sqlite`（[`packages/session/session-persistence-jsonl`](../packages/session/session-persistence-jsonl/README.md)）。
-- 终端能力会立即加载 `node-pty` 原生 addon（[`packages/subprocess/subprocess-local`](../packages/subprocess/subprocess-local/README.md)）。
+- 默认持久化后端会立即导入 `node:zlib` 的 zstd，会话搜索索引则导入 `node:sqlite`（[`packages/session/session-persistence-jsonl`](../packages/session/session-persistence-jsonl/README.zh.md)）。
+- 终端能力会立即加载 `node-pty` 原生 addon（[`packages/subprocess/subprocess-local`](../packages/subprocess/subprocess-local/README.zh.md)）。
 
 ## 开发模式
 
@@ -101,5 +101,5 @@ ditto "desktop/apps/shell/dist/mac-arm64/DeepSeek Harness.app" "/Applications/De
 
 | 版本 | 状态 | 目标 | 文档 |
 |---|---|---|---|
-| 0.0.1 | 提案中 | macOS（Apple Silicon） | [`docs/releases/v0.0.1`](docs/releases/v0.0.1/README.md) |
-| 0.0.2 | 提案中 | macOS（Apple Silicon） | [`docs/releases/v0.0.2`](docs/releases/v0.0.2/README.md) |
+| 0.0.1 | 提案中 | macOS（Apple Silicon） | [`docs/releases/v0.0.1`](docs/releases/v0.0.1/README.zh.md) |
+| 0.0.2 | 提案中 | macOS（Apple Silicon） | [`docs/releases/v0.0.2`](docs/releases/v0.0.2/README.zh.md) |

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-13-spawnable-packaged-binary-paths.md
-2026-09-13-spawnable-packaged-binary-paths.md: acc4d4a4cee00a89a4463d62e542a5346a756eb9
-2026-09-13-spawnable-packaged-binary-paths.zh.md: c149c97dcff5c4ab9b55971f8f89dc964c4fdb3d
+2026-09-13-spawnable-packaged-binary-paths.md: 000ba5983bafb013588cb4c2eb8430362c18019e
+2026-09-13-spawnable-packaged-binary-paths.zh.md: 4c325b739d08f7382e7194d0af0c40a0a927439d

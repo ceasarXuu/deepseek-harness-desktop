@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-09-11-fork-ci-and-desktop-release-configuration.md
 2026-09-11-fork-ci-and-desktop-release-configuration.md: 65f7466ee9045205d10ddbb9c9919d317a04dc33
-2026-09-11-fork-ci-and-desktop-release-configuration.zh.md: 065f217b8f1dfddf576f1455dfb00f5cc74271a6
+2026-09-11-fork-ci-and-desktop-release-configuration.zh.md: 0bb215007547193594ec91ee9444d1317e7ffe2f

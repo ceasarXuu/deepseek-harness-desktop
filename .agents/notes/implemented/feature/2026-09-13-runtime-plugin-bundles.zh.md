@@ -10,7 +10,7 @@ Status: implemented
 
 同类应用都用同一种做法解决同一个问题。VS Code 把 `.vsix` 归档装进 `~/.vscode/extensions`，并在独立的扩展宿主进程里运行，于是「行为不端的扩展无法影响 VS Code」。Claude Desktop 安装 `.mcpb` 包——一个 zip，内含 manifest、服务器代码，以及打包好的 `node_modules`——并以应用自带的运行时把每个包作为子进程运行。Codex 与 ChatGPT 桌面配置的是 MCP server，同样是进程。没有任何一个在应用内跑包管理器，也没有任何一个把插件写进自己已签名的包体内。
 
-而本仓库早已具备这一设计的承重部分，只是没有启用：[`packages/mcp/mcp-client`](../../../../packages/mcp/mcp-client/README.md) 会拉起外部 MCP server、发现其工具、把每个工具注册为 `mcp__<server>__<tool>` 形态的原生工具，并负责断线重连——而没有任何组合包挂载过它。要在运行时安装插件，缺的是一个安放它的存储与一行挂载它的组合项，而不是一套新协议。
+而本仓库早已具备这一设计的承重部分，只是没有启用：[`packages/mcp/mcp-client`](../../../../packages/mcp/mcp-client/README.zh.md) 会拉起外部 MCP server、发现其工具、把每个工具注册为 `mcp__<server>__<tool>` 形态的原生工具，并负责断线重连——而没有任何组合包挂载过它。要在运行时安装插件，缺的是一个安放它的存储与一行挂载它的组合项，而不是一套新协议。
 
 ## 决策
 

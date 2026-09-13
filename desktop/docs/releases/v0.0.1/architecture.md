@@ -32,7 +32,7 @@ The child process needs a Node runtime that satisfies the repository engine floo
 
 **Selection: Electron's own Node, with a bundled official Node binary as the fallback.**
 
-The selection is driven by two facts. First, Electron 44.3.0's bundled Node 24.20.0 satisfies the engine floor without shipping a second runtime, which keeps the application bundle roughly one Node runtime smaller than the alternatives. Second, the `node-pty` patch already anticipates this shape: [`patches/node-pty@1.1.0.patch`](../../../../patches/node-pty@1.1.0.patch) adds a `DSH_NODE_PTY_SPAWN_HELPER` environment variable and, absent it, probes `process.execPath + '-spawn-helper'`, which is the Electron binary path rather than a sibling of the addon.
+The selection is driven by two facts. First, Electron 44.3.0's bundled Node 24.20.0 satisfies the engine floor without shipping a second runtime, which keeps the application bundle roughly one Node runtime smaller than the alternatives. Second, the `node-pty` patch already anticipates this shape: [`patches/node-pty@1.2.0-beta.15.patch`](../../../../patches/node-pty@1.2.0-beta.15.patch) adds a `DSH_NODE_PTY_SPAWN_HELPER` environment variable and, absent it, probes `process.execPath + '-spawn-helper'`, which is the Electron binary path rather than a sibling of the addon.
 
 The carrier is isolated behind one module in the shell that produces an executable path and an argument vector. Switching carriers changes that module and the packaging rules, not the boot sequence or the composition.
 

@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-桌面发行版需要让 harness 运行在一个打包好的应用里，而目标机器上没有 Node.js、没有包管理器、也没有终端。而 harness 当前的形态假定的是反面：[`apps/cli`](../../../../apps/cli/README.md) 从 harness home 下的 profile 目录解析组合包、通过 Node 的模块解析按裸名挂载插件，并且——如 [`desktop/docs/releases/v0.0.1/architecture.md`](../../../../desktop/docs/releases/v0.0.1/architecture.md) 所记录——安装一个会终止所在进程的处理器，并强制挂载一个 HMR 服务，这两者都属于交互式终端应用。
+桌面发行版需要让 harness 运行在一个打包好的应用里，而目标机器上没有 Node.js、没有包管理器、也没有终端。而 harness 当前的形态假定的是反面：[`apps/cli`](../../../../apps/cli/README.zh.md) 从 harness home 下的 profile 目录解析组合包、通过 Node 的模块解析按裸名挂载插件，并且——如 [`desktop/docs/releases/v0.0.1/architecture.md`](../../../../desktop/docs/releases/v0.0.1/architecture.md) 所记录——安装一个会终止所在进程的处理器，并强制挂载一个 HMR 服务，这两者都属于交互式终端应用。
 
 把 harness 直接跑在 Electron 主进程里同样不可行。终端能力会立即导入 `node-pty`，裸包名解析需要 Node 的内部 ESM loader，而启动器的故障处理会在一次未处理的 rejection 上终止整个应用。
 

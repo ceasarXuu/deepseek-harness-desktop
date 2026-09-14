@@ -51,7 +51,7 @@ DeepSeek Harness 的桌面发行版：一个已签名、自包含的 macOS 应�
 
 | 路径 | 状态 | 保留原因 |
 |---|---|---|
-| [`packages/plugin-store`](packages/plugin-store)、[`packages/ui-plugin-store`](packages/ui-plugin-store) | 在工作区之外：既不构建也不运行 | 它们负责在运行中的应用内安装插件包。上游基于内置 pnpm 的插件管理窗目前覆盖该能力；这些包曾承载的 MCP 包面尚未在那里重新表达 |
+| [`packages/plugin-store`](packages/plugin-store)、[`packages/ui-plugin-store`](packages/ui-plugin-store) | 在工作区之外：既不构建也不运行 | 它们承载的能力现以 [`apps/desktop/src/mcp-bundles.ts`](../apps/desktop/src/mcp-bundles.ts)（安装、注册表、生成的插件）与插件窗的 MCP 包区块交付；这两个包仅作为更早的实现保留 |
 | [`build/icons`](build/icons)、[`build/entitlements.mac.plist`](build/entitlements.mac.plist) | 当前打包未使用 | 上游配置使用 Electron 默认图标，因此启用这些图标属于需要单独验收的产品改动 |
 | [`docs/releases`](docs/releases/README.zh.md) | 历史发布规划 | 记录每个版本当初的目标 |
 

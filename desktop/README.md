@@ -51,7 +51,7 @@ The rule that keeps the table short is that a fork change belongs in `apps/deskt
 
 | Path | State | Why it is kept |
 |---|---|---|
-| [`packages/plugin-store`](packages/plugin-store), [`packages/ui-plugin-store`](packages/ui-plugin-store) | Outside the workspace: neither builds nor runs | They install plugin bundles into a running application. Upstream's plugin manager window over the bundled pnpm covers that capability today; the MCP package surface these packages carried is not re-expressed there yet |
+| [`packages/plugin-store`](packages/plugin-store), [`packages/ui-plugin-store`](packages/ui-plugin-store) | Outside the workspace: neither builds nor runs | The capability they carried now ships as [`apps/desktop/src/mcp-bundles.ts`](../apps/desktop/src/mcp-bundles.ts) (install, registry, generated plugin) and the plugin window's MCP bundles section; the two packages remain only as the earlier implementation |
 | [`build/icons`](build/icons), [`build/entitlements.mac.plist`](build/entitlements.mac.plist) | Unused by the current packaging | Upstream's configuration uses Electron's default icon, so adopting these icons is a product change with its own verification |
 | [`docs/releases`](docs/releases/README.md) | Historical release plans | They record what each version intended |
 

@@ -43,6 +43,18 @@ Reset deletes every entry in `$DSH_HOME/profiles/desktop` except the held transa
 
 Package transactions hold `$DSH_HOME/profiles/desktop/lock` exclusively through pnpm process exit. Reset preserves the directory and its lock until initialization and Host startup finish. Shared links use directory symlinks on macOS/Linux and junctions on Windows; cleanup removes links without deleting their targets. Canonical filesystem paths identify shared packages, so Windows path casing alone does not trigger profile activation. Native builds follow the profile’s reviewed `allowBuilds` list; installing a new build-requiring package without approval in that list fails the transaction.
 
+### Startup recovery
+
+The local loading page reports startup status and, on failure, names what failed and what each recovery action does; the failure text stays visible while the actions below it are offered. Restart is always offered and closes the application and relaunches it. Disabling third-party plugins and resetting Desktop are offered only when the initialized application can repair its profile, which packaged application resources provide, so development projects and early initialization failures expose restart alone. The two profile-mutating actions render as destructive and carry their own advice line: disabling keeps plugin files and starts without them, while resetting deletes all Desktop configuration and third-party plugins without a backup before starting a fresh profile. Clicking an action keeps a busy state that disables every action and reports that it is running, and a failed action reports that failure in place of the original text instead of leaving the page unchanged. When a shell resource or preload failure prevents the loading page itself from loading, a self-contained document carries the same failure text and offers restart always, plus the two profile actions only when profile recovery is available.
+
+### First launch
+
+An installed application that started without a profile shows one first-launch guide after the workspace opens. The native dialog states that the application runs on its own bundled runtime, names where that runtime lives, and points to the Desktop Plugins window, opened from the application menu, as the place plugins are managed. Its single action continues into the application, and its "Don't show this again" checkbox writes `$DSH_HOME/desktop/first-launch-guide.json`. The choice lives in Electron-owned state beside the profile rather than inside it, so it survives a reset, and a launch that found an existing profile, or any development project, never shows the guide.
+
+### Diagnostics
+
+The Desktop Plugins window has a Diagnostics section listing the application version, the dsh runtime version, the Harness home, the runtime location, and the last start’s outcome, whether succeeded or failed together with its message. The main process assembles those facts and their localized labels into one text block; a copy action places that block on the clipboard, and a reveal action opens the Harness home in the file manager. The renderer receives the single assembled payload over the desktop bridge and renders one row per fact, so it reads no filesystem and invokes no shell itself, and a version it cannot read yet, such as before the runtime descriptor exists, shows as unavailable rather than failing the section.
+
 ## Develop
 
 `dev:desktop` builds the current Host, client bundles, Web frontend, and Electron shell, projects the built CLI and private Desktop Host packages with their workspace dependencies into a disposable desktop npm project, and launches Electron without downloading the packaged Node.js runtime or resolving dsh from npm:
@@ -188,6 +200,10 @@ An unpacked artifact contains Electron, the runtime archive, upstream Node.js an
 A packaged application checks its target-specific release stream ten seconds after the main window opens; the localized **Check for Updates…** menu item triggers the same check manually. An available release opens one native confirmation dialog. Accepting it waits for an in-flight check, downloads and verifies the signed Desktop release, stops the dsh child, and hands installation plus restart to electron-updater. The next launch displays the local loading page while reconciling the version-bound runtime.
 
 Signed packaging emits generic-provider channel metadata for the deployment selected by `DSH_DESKTOP_AUTO_UPDATE_ENV`. NSIS differential packages and the macOS ZIP target allow electron-updater to reuse unchanged blocks; the manually installed DMG is notarized without a blockmap because it is not a macOS updater payload. The runtime and shell still form one signed Desktop release. macOS signing and notarization credentials use electron-builder's standard environment; Windows EV signing uses the public certificate, validated SignTool, SafeNet container, and runner PIN described above. The required Desktop release environment selects the application and platform signature identities that the build verifies.
+
+### Update flow
+
+A check publishes its phase to every window and retains the available version. The native confirmation names that version and states that the release includes its matching dsh runtime and that the application restarts to finish installing, so the user sees the release and the restart before accepting. Declining leaves the release known, so a later check that cannot reach the feed reports its error while keeping the declined version installable. Accepting waits for an in-flight check and then downloads and verifies the release; a failed download is reported and leaves the release retryable. Once the download succeeds the application stops the dsh child and hands installation plus restart to electron-updater, and a failed handoff is reported too: the application keeps running on the old release with the update still installable.
 
 ## Low-level development overrides
 

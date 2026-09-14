@@ -30,7 +30,13 @@ async function main() {
   document.querySelector('#retry').textContent = messages.retry
   document.querySelector('#disable-all').textContent = messages.disableAll
 
+  document.querySelector('#diagnostics-heading').textContent = messages.diagnosticsHeading
+  document.querySelector('#diagnostics-description').textContent = messages.diagnosticsDescription
+  document.querySelector('#diagnostics-copy').textContent = messages.diagnosticsCopy
+  document.querySelector('#diagnostics-reveal').textContent = messages.diagnosticsReveal
+
   const list = document.querySelector('#plugins')
+  const diagnosticsList = document.querySelector('#diagnostics')
   const empty = document.querySelector('#empty')
   const status = document.querySelector('#status')
   const form = document.querySelector('#install-form')
@@ -132,12 +138,63 @@ async function main() {
     bundleEmpty.hidden = bundles.length !== 0
   }
 
+  function diagnosticRow(label, value) {
+    const item = document.createElement('li')
+    const name = document.createElement('span')
+    name.className = 'diagnostic-label'
+    name.textContent = label
+    const factNode = document.createElement('span')
+    factNode.className = 'diagnostic-value'
+    factNode.textContent = value
+    item.append(name, factNode)
+    return item
+  }
+
+  let diagnosticsBlock = ''
+
+  async function renderDiagnostics() {
+    const diagnostics = await api.diagnostics.get()
+    diagnosticsBlock = diagnostics.block
+    const startup = diagnostics.startupFailed
+      ? message('diagnosticsStartupFailed', { message: diagnostics.startupFailure ?? '' })
+      : messages.diagnosticsStartupSucceeded
+    diagnosticsList.replaceChildren(
+      diagnosticRow(messages.diagnosticsApplication, diagnostics.applicationVersion),
+      diagnosticRow(messages.diagnosticsDsh, diagnostics.dshVersion),
+      diagnosticRow(messages.diagnosticsHome, diagnostics.harnessHome),
+      diagnosticRow(messages.diagnosticsRuntime, diagnostics.runtimeLocation),
+      diagnosticRow(messages.diagnosticsStartup, startup),
+    )
+  }
+
+  async function copyDiagnostics() {
+    try {
+      await navigator.clipboard.writeText(diagnosticsBlock)
+      status.textContent = messages.diagnosticsCopied
+    } catch {
+      status.textContent = messages.diagnosticsCopyFailed
+    }
+  }
+
+  async function revealDiagnostics() {
+    setBusy(true, messages.diagnosticsRevealing)
+    try {
+      await api.diagnostics.reveal()
+      status.textContent = messages.diagnosticsRevealed
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : String(error)
+    } finally {
+      setBusy(false, status.textContent)
+    }
+  }
+
   async function render() {
     const backend = await api.backend.status()
     document.querySelector('#recovery').hidden = backend.phase !== 'error'
     document.querySelector('#startup-error').textContent = backend.phase === 'error' ? backend.message : ''
     await renderPlugins()
     await renderBundles()
+    await renderDiagnostics()
   }
 
   async function run(operation, statusMessage) {
@@ -198,6 +255,8 @@ async function main() {
   })
   document.querySelector('#retry').addEventListener('click', () => void run(() => api.backend.retry(), messages.retry))
   document.querySelector('#disable-all').addEventListener('click', () => void run(() => api.plugins.disableAll(), messages.changingActivation))
+  document.querySelector('#diagnostics-copy').addEventListener('click', () => { void copyDiagnostics() })
+  document.querySelector('#diagnostics-reveal').addEventListener('click', () => { void revealDiagnostics() })
   refresh.addEventListener('click', () => void load(messages.refreshing, messages.refreshed))
 
   async function pickBundleFile() {

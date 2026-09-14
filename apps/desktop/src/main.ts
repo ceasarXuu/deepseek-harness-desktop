@@ -1,5 +1,6 @@
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
+import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,6 +11,7 @@ import {
   ipcMain,
   Menu,
   protocol,
+  shell,
   type IpcMainInvokeEvent,
 } from 'electron'
 import { resolveDesktopPaths } from './paths.ts'
@@ -22,6 +24,12 @@ import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { startupFailureDocument } from './startup-document.ts'
+import { assembleDesktopDiagnostics } from './diagnostics.ts'
+import {
+  readFirstLaunchGuideAcknowledged,
+  shouldShowFirstLaunchGuide,
+  writeFirstLaunchGuideAcknowledged,
+} from './first-launch.ts'
 import { DESKTOP_RUNTIME_ARCHIVE, ensureDesktopRuntime, type DesktopRuntimeProgress } from './runtime-closure.ts'
 
 const SCHEME = 'dsh-app'
@@ -178,6 +186,10 @@ async function main(): Promise<void> {
     : process.env.DSH_DESKTOP_DSH_DIR ?? development)
   const manager = new DesktopProjectManager(paths, resources)
   profileRecoveryAvailable = () => development === undefined && manager.canRecoverProfile()
+  // The guide belongs to the first start of an installed application: a development
+  // project, and a launch that found an existing profile, both skip it.
+  const profileExisted = development !== undefined || existsSync(paths.profile)
+  let firstLaunchGuideOffered = false
   let pageError: Extract<DesktopBackendState, { phase: 'error' }> | undefined
   let quitting = false
   let startup: Promise<void> | undefined
@@ -200,6 +212,28 @@ async function main(): Promise<void> {
     const diagnostic = desktopErrorState(error).message
     pageError = { phase: 'error', message: diagnostic }
     if (mainWindow !== undefined) await showEmergencyDocument(mainWindow, diagnostic)
+  }
+
+  const offerFirstLaunchGuide = async (): Promise<void> => {
+    if (firstLaunchGuideOffered) return
+    if (!shouldShowFirstLaunchGuide({
+      profileExisted,
+      acknowledged: readFirstLaunchGuideAcknowledged(paths.root),
+    })) return
+    firstLaunchGuideOffered = true
+    const result = await dialog.showMessageBox({
+      type: 'info',
+      title: messages.firstLaunchGuideTitle,
+      message: messages.firstLaunchGuideMessage,
+      detail: formatDesktopMessage(messages.firstLaunchGuideDetail, {
+        runtime: join(paths.closure, app.getVersion()),
+      }),
+      buttons: [messages.firstLaunchGuideDismiss],
+      checkboxLabel: messages.firstLaunchGuideDontShowAgain,
+      checkboxChecked: false,
+    })
+    // The record lives beside the profile, not inside it, so it survives a reset.
+    if (result.checkboxChecked) writeFirstLaunchGuideAcknowledged(paths.root)
   }
 
   const navigateMain = (url: string): Promise<void> => {
@@ -288,7 +322,10 @@ async function main(): Promise<void> {
           await manager.applyRelease()
         }
       })
-      if (backend.host !== undefined) await navigateMain(applicationUrl)
+      if (backend.host !== undefined) {
+        await navigateMain(applicationUrl)
+        void offerFirstLaunchGuide().catch((error: unknown) => { console.error(error) })
+      }
     })().catch(async (error: unknown) => {
       await showStartupError(error)
       throw error
@@ -299,8 +336,10 @@ async function main(): Promise<void> {
   const updates = new DesktopUpdateCoordinator(
     publishUpdate,
     async () => {
-      shellInstallerOwnsQuit = true
+      // Keep the application running with the old release when the child cannot
+      // stop: the quit that skips child teardown is armed only after stop returns.
       await backend.stop()
+      shellInstallerOwnsQuit = true
     },
   )
 
@@ -403,6 +442,29 @@ async function main(): Promise<void> {
     await reconcileBackend()
     focusPrimaryWindow()
   })
+  ipcMain.handle(DESKTOP_IPC.diagnosticsGet, (event) => {
+    assertDesktopSender(event, ['shell'])
+    const state = backendState()
+    let dshVersion: string
+    try {
+      dshVersion = manager.dshVersion()
+    } catch {
+      // The runtime descriptor is unknown until startup reads it; diagnostics still work.
+      dshVersion = messages.diagnosticsUnknown
+    }
+    return assembleDesktopDiagnostics({
+      applicationVersion: app.getVersion(),
+      dshVersion,
+      harnessHome: paths.root,
+      runtimeLocation: resources.dsh,
+      failure: state.phase === 'error' ? state.message : undefined,
+    }, messages)
+  })
+  ipcMain.handle(DESKTOP_IPC.diagnosticsReveal, async (event) => {
+    assertDesktopSender(event, ['shell'])
+    const failure = await shell.openPath(paths.root)
+    if (failure !== '') throw new Error(formatDesktopMessage(messages.diagnosticsRevealFailed, { message: failure }))
+  })
   ipcMain.handle(DESKTOP_IPC.applicationRestart, async (event) => {
     assertDesktopSender(event, ['shell'])
     try {
@@ -459,8 +521,8 @@ async function main(): Promise<void> {
     const result = await dialog.showMessageBox({
       type: 'info',
       title: messages.updateTitle,
-      message: messages.updateAvailable,
-      detail: formatDesktopMessage(messages.updateDetail, { version: state.version ?? '' }),
+      message: formatDesktopMessage(messages.updateAvailable, { version: state.version ?? '' }),
+      detail: messages.updateDetail,
       buttons: [messages.installAndRestart, messages.later],
       defaultId: 0,
       cancelId: 1,

@@ -32,6 +32,10 @@ const api: DshDesktopApi = {
       return () => { ipcRenderer.off(DESKTOP_IPC.backendState, handle) }
     },
   },
+  diagnostics: {
+    get: () => ipcRenderer.invoke(DESKTOP_IPC.diagnosticsGet) as ReturnType<DshDesktopApi['diagnostics']['get']>,
+    reveal: () => ipcRenderer.invoke(DESKTOP_IPC.diagnosticsReveal) as Promise<void>,
+  },
   updates: {
     check: () => ipcRenderer.invoke(DESKTOP_IPC.updatesCheck) as Promise<DesktopUpdateState>,
     install: () => ipcRenderer.invoke(DESKTOP_IPC.updatesInstall) as Promise<void>,

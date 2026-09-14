@@ -1,6 +1,7 @@
 DeepSeek Harness could not start
-Choose a recovery action below. Disabling third-party plugins retains their files.
-Reset Desktop deletes all Desktop profile configuration and third-party plugins without a backup, then starts a fresh profile. Shared tasks and settings are retained.
+DeepSeek Harness could not open your workspace. Choose a recovery action below: each one stops the current attempt and retries startup.
+Disabling third-party plugins keeps their files and starts DeepSeek Harness without them. Enable them again later from the Desktop Plugins window.
+Reset Desktop deletes all Desktop configuration and third-party plugins without a backup, then starts a fresh profile. Shared tasks and settings are kept.
 If application files are missing or damaged, close the application and reinstall it. Your tasks are stored separately.
 Failure details
 Close and restart

@@ -4,6 +4,10 @@ import type { DesktopLocale } from './locale.ts'
 
 /**
  * Render escaped diagnostics without depending on application resource files.
+ *
+ * The document offers exactly the recovery actions this context can run: restart
+ * is always available, while disabling plugins and resetting Desktop are offered
+ * only when packaged application resources support profile recovery.
  * @param locale - Shell-owned translations.
  * @param message - Failure details displayed as plain text.
  * @param profileRecovery - Whether the initialized application can repair its profile.
@@ -16,8 +20,10 @@ export function startupFailureDocument(locale: DesktopLocale, message: string, p
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; form-action dsh-recovery:">
 <title>${escape(locale.messages.startupFailed)}</title>
 <style>:root{color-scheme:light dark;font-family:system-ui}body{max-width:720px;margin:10vh auto;padding:24px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style>
-<main><h1>${escape(locale.messages.startupFailed)}</h1><p>${escape(locale.messages.startupReinstallAdvice)}</p>
-${profileRecovery ? `<p>${escape(locale.messages.startupConfigurationAdvice)}</p>` : ''}
+<main><h1>${escape(locale.messages.startupFailed)}</h1><p>${escape(locale.messages.startupErrorDescription)}</p>
+<p>${escape(locale.messages.startupReinstallAdvice)}</p>
+${profileRecovery ? `<p>${escape(locale.messages.startupDisablePluginsAdvice)}</p>
+<p>${escape(locale.messages.startupConfigurationAdvice)}</p>` : ''}
 <pre role="alert">${escape(message)}</pre>
 <form action="dsh-recovery://restart"><button>${escape(locale.messages.restartApplication)}</button></form>
 ${profileRecovery ? `<form action="dsh-recovery://plugins"><button>${escape(locale.messages.disableThirdPartyPlugins)}</button></form>

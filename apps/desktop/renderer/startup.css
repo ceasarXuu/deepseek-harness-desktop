@@ -10,6 +10,8 @@ p { color: #666; line-height: 1.6; }
 #actions { margin-top: 24px; }
 button { margin: 4px; padding: 10px 18px; border: 1px solid transparent; border-radius: 8px; color: #fff; background: #4d6bfe; font: inherit; cursor: pointer; }
 button.secondary { color: inherit; background: transparent; border-color: #c8c8d0; }
+button.danger { background: #c23b33; }
+#recovery-status { color: #4d6bfe; }
 button:disabled { opacity: 0.5; cursor: default; }
 button:focus-visible { outline: 2px solid #4d6bfe; outline-offset: 3px; }
 [hidden] { display: none !important; }

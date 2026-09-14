@@ -99,4 +99,72 @@ describe('desktop update coordinator', () => {
     await expect(installing).resolves.toEqual({ phase: 'ready', version: '1.2.0' })
     expect(downloadUpdate).toHaveBeenCalledOnce()
   })
+
+  it('retains an available release when a later check cannot reach the feed', async () => {
+    const downloadUpdate = vi.fn(async () => [])
+    const quitAndInstall = vi.fn()
+    const updater = {
+      autoDownload: true,
+      autoInstallOnAppQuit: true,
+      checkForUpdates: vi.fn()
+        .mockResolvedValueOnce({ isUpdateAvailable: true, updateInfo: { version: '1.1.0' } })
+        .mockRejectedValueOnce(new Error('release feed unreachable')),
+      downloadUpdate,
+      quitAndInstall,
+    } as unknown as AppUpdater
+    const coordinator = new DesktopUpdateCoordinator(state => state, async () => {}, updater, () => true)
+
+    await expect(coordinator.check()).resolves.toEqual({ phase: 'available', version: '1.1.0' })
+    await expect(coordinator.check())
+      .resolves.toEqual({ phase: 'error', version: '1.1.0', message: 'release feed unreachable' })
+    expect(coordinator.state).toEqual({ phase: 'error', version: '1.1.0', message: 'release feed unreachable' })
+    await expect(coordinator.install()).resolves.toEqual({ phase: 'ready', version: '1.1.0' })
+    expect(downloadUpdate).toHaveBeenCalledOnce()
+  })
+
+  it('reports a failed install with its reason and leaves the old release running', async () => {
+    const downloadUpdate = vi.fn(async () => { throw new Error('download checksum mismatch') })
+    const beforeRestart = vi.fn(async () => {})
+    const quitAndInstall = vi.fn()
+    const updater = {
+      autoDownload: true,
+      autoInstallOnAppQuit: true,
+      checkForUpdates: vi.fn(async () => ({ isUpdateAvailable: true, updateInfo: { version: '1.2.0' } })),
+      downloadUpdate,
+      quitAndInstall,
+    } as unknown as AppUpdater
+    const coordinator = new DesktopUpdateCoordinator(state => state, beforeRestart, updater, () => true)
+
+    await coordinator.check()
+    await expect(coordinator.install())
+      .resolves.toEqual({ phase: 'error', version: '1.2.0', message: 'download checksum mismatch' })
+    expect(quitAndInstall).not.toHaveBeenCalled()
+    expect(beforeRestart).not.toHaveBeenCalled()
+    // The retained release stays installable, so the user can retry without rechecking.
+    await expect(coordinator.install())
+      .resolves.toEqual({ phase: 'error', version: '1.2.0', message: 'download checksum mismatch' })
+  })
+
+  it('keeps the downloaded release installable when the restart handoff fails', async () => {
+    const downloadUpdate = vi.fn(async () => [])
+    const beforeRestart = vi.fn()
+      .mockRejectedValueOnce(new Error('the backend did not stop'))
+      .mockResolvedValue(undefined)
+    const quitAndInstall = vi.fn()
+    const updater = {
+      autoDownload: true,
+      autoInstallOnAppQuit: true,
+      checkForUpdates: vi.fn(async () => ({ isUpdateAvailable: true, updateInfo: { version: '1.2.0' } })),
+      downloadUpdate,
+      quitAndInstall,
+    } as unknown as AppUpdater
+    const coordinator = new DesktopUpdateCoordinator(state => state, beforeRestart, updater, () => true)
+
+    await coordinator.check()
+    await expect(coordinator.install())
+      .resolves.toEqual({ phase: 'error', version: '1.2.0', message: 'the backend did not stop' })
+    expect(quitAndInstall).not.toHaveBeenCalled()
+    await expect(coordinator.install()).resolves.toEqual({ phase: 'ready', version: '1.2.0' })
+    expect(quitAndInstall).toHaveBeenCalledWith(false, true)
+  })
 })

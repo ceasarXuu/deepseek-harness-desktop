@@ -15,13 +15,15 @@
       <div id="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
         <div id="progress-bar"></div>
       </div>
+      <p id="disable-advice" hidden></p>
       <p id="reset-advice" hidden></p>
       <p id="reinstall-advice" hidden></p>
+      <p id="recovery-status" role="status" aria-live="polite" hidden></p>
       <pre id="error" role="alert" hidden></pre>
       <div id="actions" hidden>
         <button id="restart" type="button"></button>
-        <button id="disable-plugins" type="button"></button>
-        <button id="reset-configuration" type="button"></button>
+        <button id="disable-plugins" class="danger" type="button"></button>
+        <button id="reset-configuration" class="danger" type="button"></button>
       </div>
     </main>
     <script src="startup.js"></script>

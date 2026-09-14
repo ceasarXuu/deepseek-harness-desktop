@@ -10,6 +10,7 @@ const { autoUpdater } = electronUpdater
 /** Checks, downloads, and installs one complete Desktop release. */
 export class DesktopUpdateCoordinator {
   private availableVersion: string | undefined
+  private current: DesktopUpdateState = { phase: 'idle' }
   private checkOperation: Promise<DesktopUpdateState> | undefined
   private installOperation: Promise<DesktopUpdateState> | undefined
 
@@ -31,6 +32,9 @@ export class DesktopUpdateCoordinator {
     this.updater.autoInstallOnAppQuit = false
   }
 
+  /** Last state published to desktop windows, retained while the user keeps working. */
+  get state(): DesktopUpdateState { return this.current }
+
   /** Check the configured Desktop release stream and retain an available version. */
   async check(): Promise<DesktopUpdateState> {
     if (this.installOperation !== undefined) return this.installOperation
@@ -49,23 +53,31 @@ export class DesktopUpdateCoordinator {
     return this.installOperation
   }
 
+  private retain(state: DesktopUpdateState): DesktopUpdateState {
+    this.current = state
+    return this.publish(state)
+  }
+
   private async doCheck(): Promise<DesktopUpdateState> {
-    this.publish({ phase: 'checking' })
+    this.retain({ phase: 'checking' })
     try {
       if (!this.enabled()) {
         this.availableVersion = undefined
-        return this.publish({ phase: 'idle' })
+        return this.retain({ phase: 'idle' })
       }
       const result = await this.updater.checkForUpdates()
       const version = result?.isUpdateAvailable === true ? result.updateInfo.version : undefined
       this.availableVersion = version
       return version === undefined
-        ? this.publish({ phase: 'idle' })
-        : this.publish({ phase: 'available', version })
+        ? this.retain({ phase: 'idle' })
+        : this.retain({ phase: 'available', version })
     } catch (error) {
-      this.availableVersion = undefined
-      return this.publish({
+      // A check that cannot reach the feed must not erase a release the user already
+      // declined: the retained version keeps Install available after the fact.
+      const version = this.availableVersion
+      return this.retain({
         phase: 'error',
+        ...(version === undefined ? {} : { version }),
         message: error instanceof Error ? error.message : String(error),
       })
     }
@@ -76,20 +88,22 @@ export class DesktopUpdateCoordinator {
     if (version === undefined) {
       throw new Error('desktop update: no verified update is available')
     }
-    this.publish({ phase: 'installing', version })
+    this.retain({ phase: 'installing', version })
     try {
       await this.updater.downloadUpdate()
-      this.availableVersion = undefined
-      const ready = this.publish({ phase: 'ready', version })
-      await this.beforeRestart()
-      this.updater.quitAndInstall(false, true)
-      return ready
     } catch (error) {
-      return this.publish({
-        phase: 'error',
-        version,
-        message: error instanceof Error ? error.message : String(error),
-      })
+      return this.retain({ phase: 'error', version, message: error instanceof Error ? error.message : String(error) })
     }
+    // The download is only forgotten once the restart succeeded: a failed handoff
+    // leaves the application running with the old release and the update installable.
+    const ready = this.retain({ phase: 'ready', version })
+    try {
+      await this.beforeRestart()
+    } catch (error) {
+      return this.retain({ phase: 'error', version, message: error instanceof Error ? error.message : String(error) })
+    }
+    this.availableVersion = undefined
+    this.updater.quitAndInstall(false, true)
+    return ready
   }
 }

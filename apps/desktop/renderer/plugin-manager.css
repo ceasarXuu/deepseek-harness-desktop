@@ -142,3 +142,18 @@ h3 {
 .package-detail {
   color: CanvasText;
 }
+
+#diagnostics li {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.diagnostic-label {
+  color: GrayText;
+}
+
+.diagnostic-value {
+  font: 0.9em ui-monospace, monospace;
+  overflow-wrap: anywhere;
+  text-align: right;
+}

@@ -8,6 +8,7 @@ async function main() {
   document.querySelector('#disable-plugins').textContent = messages.disableThirdPartyPlugins
   document.querySelector('#reset-configuration').textContent = messages.resetConfiguration
   document.querySelector('#reset-advice').textContent = messages.startupConfigurationAdvice
+  document.querySelector('#disable-advice').textContent = messages.startupDisablePluginsAdvice
   document.querySelector('#reinstall-advice').textContent = messages.startupReinstallAdvice
   function render(state) {
     const failed = state.phase === 'error'
@@ -22,14 +23,26 @@ async function main() {
     document.querySelector('#progress').hidden = runtime === undefined
     document.querySelector('#progress').setAttribute('aria-valuenow', String(percent))
     document.querySelector('#progress-bar').style.width = `${percent}%`
+    document.querySelector('#recovery-status').hidden = true
+    document.querySelector('#recovery-status').textContent = ''
     document.querySelector('#error').hidden = !failed
     document.querySelector('#error').textContent = failed ? state.message : ''
     document.querySelector('#actions').hidden = !failed
     for (const button of document.querySelectorAll('#actions button')) button.disabled = !failed
-    for (const selector of ['#disable-plugins', '#reset-configuration', '#reset-advice']) {
+    for (const selector of ['#disable-plugins', '#reset-configuration', '#disable-advice', '#reset-advice']) {
       document.querySelector(selector).hidden = !failed || !state.profileRecovery
     }
     document.querySelector('#reinstall-advice').hidden = !failed
+  }
+  function renderBusy() {
+    document.querySelector('main').setAttribute('aria-busy', 'true')
+    document.querySelector('#spinner').hidden = false
+    document.querySelector('#progress').hidden = true
+    document.querySelector('#error').hidden = true
+    document.querySelector('#error').textContent = ''
+    document.querySelector('#recovery-status').hidden = false
+    document.querySelector('#recovery-status').textContent = messages.startupRecovering
+    for (const button of document.querySelectorAll('#actions button')) button.disabled = true
   }
   let changed = false
   const unsubscribe = api.backend.subscribe(state => { changed = true; render(state) })
@@ -37,7 +50,7 @@ async function main() {
   const initial = await api.backend.status()
   if (!changed) render(initial)
   async function recover(operation) {
-    render({ phase: 'starting' })
+    renderBusy()
     try { await operation() }
     catch (error) {
       const current = await api.backend.status().catch(() => undefined)

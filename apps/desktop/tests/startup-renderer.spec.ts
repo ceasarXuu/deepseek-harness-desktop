@@ -44,7 +44,8 @@ function startup(locale = 'en', status: Promise<DesktopBackendState> = Promise.r
   }
   const publish = (state: DesktopBackendState): void => { for (const listener of listeners) listener(state) }
   const copy = (): string => [element('#title').textContent, element('#description').textContent,
-    ...['#reset-advice', '#reinstall-advice', '#error', '#actions'].filter(selector => !element(selector).hidden)
+    ...['#disable-advice', '#reset-advice', '#reinstall-advice', '#recovery-status', '#error', '#actions']
+      .filter(selector => !element(selector).hidden)
       .flatMap(selector => selector === '#actions'
         ? [...document.querySelectorAll<HTMLButtonElement>('#actions button')].filter(button => !button.hidden).map(button => button.textContent)
         : [element(selector).textContent]),
@@ -68,8 +69,9 @@ it('shows English loading and recovery actions without a Host document', async (
   page.publish({ phase: 'error', profileRecovery: true, message: 'Plugin failed to load' })
   expect(page.copy()).toMatchInlineSnapshot(`
     "DeepSeek Harness could not start
-    Choose a recovery action below. Disabling third-party plugins retains their files.
-    Reset Desktop deletes all Desktop profile configuration and third-party plugins without a backup, then starts a fresh profile. Shared tasks and settings are retained.
+    DeepSeek Harness could not open your workspace. Choose a recovery action below: each one stops the current attempt and retries startup.
+    Disabling third-party plugins keeps their files and starts DeepSeek Harness without them. Enable them again later from the Desktop Plugins window.
+    Reset Desktop deletes all Desktop configuration and third-party plugins without a backup, then starts a fresh profile. Shared tasks and settings are kept.
     If application files are missing or damaged, close the application and reinstall it. Your tasks are stored separately.
     Plugin failed to load
     Close and restart
@@ -80,8 +82,10 @@ it('shows English loading and recovery actions without a Host document', async (
   expect(page.element('#spinner').hidden).toBe(true)
   page.button('#restart').click()
   expect(page.restart).toHaveBeenCalledOnce()
-  expect(page.element('#actions').hidden).toBe(true)
-  expect(page.element('#error').textContent).toBe('')
+  expect(page.element('#actions').hidden).toBe(false)
+  expect(page.button('#restart').disabled).toBe(true)
+  expect(page.element('#recovery-status').hidden).toBe(false)
+  expect(page.element('#recovery-status').textContent).toBe('Running the recovery action…')
   expect(page.element('main').getAttribute('aria-busy')).toBe('true')
 })
 
@@ -118,8 +122,9 @@ it('shows Chinese loading and recovery copy', async () => {
   page.publish({ phase: 'error', profileRecovery: true, message: '插件加载失败' })
   expect(page.copy()).toMatchInlineSnapshot(`
     "DeepSeek Harness 无法启动
-    请选择下方的恢复操作。禁用第三方插件会保留插件文件。
-    重置 Desktop 会删除桌面端的全部 profile 配置和第三方插件，不保留备份，然后重新初始化并启动。共享任务和设置会保留。
+    DeepSeek Harness 无法打开工作区。请选择下方的恢复操作：每个操作都会结束当前尝试并重试启动。
+    禁用第三方插件会保留插件文件，并在不加载它们的情况下启动 DeepSeek Harness。之后可在“桌面插件”窗口中重新启用。
+    重置 Desktop 会删除桌面端的全部配置和第三方插件，不保留备份，然后重新初始化并启动。共享任务和设置会保留。
     如果应用文件缺失或损坏，请关闭应用并重新安装。任务数据存储在独立位置。
     插件加载失败
     关闭并重启
@@ -159,15 +164,33 @@ it('keeps subscribed state when initial status arrives late and detaches on page
   expect(page.unsubscribe).toHaveBeenCalledOnce()
 })
 
+it('shows which recovery action is running and the failure when it is rejected', async () => {
+  const page = startup()
+  await expect.poll(() => page.button('#restart').disabled).toBe(true)
+  page.publish({ phase: 'error', profileRecovery: true, message: 'Failure details' })
+  page.disablePlugins.mockRejectedValueOnce(new page.dom.window.Error('Plugin change failed'))
+  page.button('#disable-plugins').click()
+  expect(page.element('#recovery-status').hidden).toBe(false)
+  expect(page.element('#recovery-status').textContent).toBe('Running the recovery action…')
+  expect(page.button('#reset-configuration').disabled).toBe(true)
+  expect(page.element('#error').hidden).toBe(true)
+  await expect.poll(() => page.element('#error').textContent).toBe('Plugin change failed')
+  expect(page.element('#recovery-status').hidden).toBe(true)
+  expect(page.button('#reset-configuration').disabled).toBe(false)
+})
+
 it.each(['en', 'zh-CN'])('offers recovery actions with %s guidance and preserves diagnostic text', async (locale) => {
   const page = startup(locale)
   await expect.poll(() => page.button('#restart').disabled).toBe(true)
   page.publish({ phase: 'error', profileRecovery: true, message: 'Failure details' })
+  expect(page.button('#disable-plugins').classList.contains('danger')).toBe(true)
+  expect(page.button('#reset-configuration').classList.contains('danger')).toBe(true)
   await expect(`${page.copy()}\n`).toMatchFileSnapshot(fileURLToPath(new URL(`./expected/startup-${locale}-profile.txt`, import.meta.url)))
   for (const action of ['#disable-plugins', '#reset-configuration', '#restart']) {
     page.publish({ phase: 'error', profileRecovery: true, message: 'Failure details' })
     page.button(action).click()
-    expect(page.element('#actions').hidden).toBe(true)
+    expect(page.element('#actions').hidden).toBe(false)
+    expect(page.button(action).disabled).toBe(true)
   }
   expect(page.disablePlugins).toHaveBeenCalledOnce()
   expect(page.resetConfiguration).toHaveBeenCalledOnce()
@@ -183,7 +206,9 @@ it('keeps emergency diagnostics inert without shell assets', () => {
   const dom = new JSDOM(html)
   expect(dom.window.document.querySelector('script')).toBeNull()
   expect(dom.window.document.querySelector('pre')?.textContent).toBe('<script>alert(1)</script>')
-  expect(dom.window.document.querySelector('p')?.textContent).toContain('重新安装')
+  const paragraphs = [...dom.window.document.querySelectorAll('p')].map(paragraph => paragraph.textContent ?? '')
+  expect(paragraphs.some(text => text.includes('重新安装'))).toBe(true)
+  expect(paragraphs.some(text => text.includes('不保留备份'))).toBe(true)
   expect([...dom.window.document.querySelectorAll('form')].map(form => form.action)).toEqual([
     'dsh-recovery://restart', 'dsh-recovery://plugins', 'dsh-recovery://reset',
   ])

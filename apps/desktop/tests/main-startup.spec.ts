@@ -2,6 +2,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
 import { DESKTOP_IPC } from '../src/ipc.ts'
 
+/** Dialog options the harness captures, so assertions stay typed. */
+interface DialogOptions {
+  readonly type?: string
+  readonly title?: string
+  readonly message?: string
+  readonly detail?: string
+  readonly buttons?: string[]
+  readonly checkboxLabel?: string
+  readonly checkboxChecked?: boolean
+}
+
+/** One scripted update state the mocked coordinator returns. */
+interface ScriptedUpdateState {
+  readonly phase: string
+  readonly version?: string
+  readonly message?: string
+}
+
 const harness = await vi.hoisted(async () => {
   const { EventEmitter } = await import('node:events')
   function deferred() {
@@ -20,6 +38,9 @@ const harness = await vi.hoisted(async () => {
   let navigated = deferred()
   let errorPublished = deferred()
   let quitCompleted = deferred()
+  const showMessageBox = vi.fn(async (_options: DialogOptions) => ({ response: 1, checkboxChecked: false }))
+  let updateCheck = vi.fn(async (): Promise<ScriptedUpdateState> => ({ phase: 'idle' }))
+  let updateInstall = vi.fn(async (): Promise<ScriptedUpdateState> => ({ phase: 'idle' }))
   class FakeWindow extends EventEmitter {
     destroyed = false
     readonly urls: string[] = []
@@ -74,14 +95,17 @@ const harness = await vi.hoisted(async () => {
   })
   return {
     windows, hosts, handlers, app, FakeWindow, FakeHost,
-    dialog: { showErrorBox: vi.fn(), showMessageBox: vi.fn() },
+    dialog: { showErrorBox: vi.fn(), showMessageBox },
     applyRelease: vi.fn(() => { preparing.resolve(); return prepared.promise }),
     assertProfileRuntime: vi.fn(),
     canRecoverProfile: vi.fn(() => true),
+    dshVersion: vi.fn(() => '1.0.0'),
     expandRuntime: vi.fn(async (options: { home: string; version: string; onProgress?: (progress: unknown) => void }) => {
       options.onProgress?.({ stage: 'expanding', done: 1, total: 2 })
       return join(options.home, options.version)
     }),
+    get updateCheck() { return updateCheck },
+    get updateInstall() { return updateInstall },
     get preparing() { return preparing }, get prepared() { return prepared },
     get hostStarted() { return hostStarted }, get navigated() { return navigated },
     get errorPublished() { return errorPublished }, get quitCompleted() { return quitCompleted },
@@ -92,6 +116,10 @@ const harness = await vi.hoisted(async () => {
       windows.length = 0; hosts.length = 0; handlers.clear(); app.removeAllListeners()
       app.isPackaged = true
       pluginsEnabled = false
+      showMessageBox.mockReset()
+      showMessageBox.mockImplementation(async (_options: DialogOptions) => ({ response: 1, checkboxChecked: false }))
+      updateCheck = vi.fn(async (): Promise<ScriptedUpdateState> => ({ phase: 'idle' }))
+      updateInstall = vi.fn(async (): Promise<ScriptedUpdateState> => ({ phase: 'idle' }))
       preparing = deferred(); prepared = deferred(); hostStarted = deferred()
       navigated = deferred(); errorPublished = deferred(); quitCompleted = deferred()
     },
@@ -102,13 +130,16 @@ vi.mock('electron', () => ({
   app: harness.app,
   BrowserWindow: harness.FakeWindow,
   dialog: harness.dialog,
+  shell: { openPath: vi.fn(async () => '') },
   ipcMain: {
     handle: (channel: string, handler: (event: { senderFrame: { url: string } }) => unknown) => { harness.handlers.set(channel, handler) },
   },
   Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn() },
   protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },
 }))
-vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: 'desktop-test-profile', closure: 'desktop-test-closure' }) }))
+vi.mock('../src/paths.ts', () => ({
+  resolveDesktopPaths: () => ({ root: 'desktop-test-root', profile: 'desktop-test-profile', closure: 'desktop-test-closure' }),
+}))
 vi.mock('../src/runtime-closure.ts', () => ({
   DESKTOP_RUNTIME_ARCHIVE: 'desktop-runtime.tar.zst',
   ensureDesktopRuntime: harness.expandRuntime,
@@ -117,6 +148,7 @@ vi.mock('../src/project-manager.ts', () => ({
   DesktopProjectManager: class {
     readonly applyRelease = harness.applyRelease
     readonly assertProfileRuntime = harness.assertProfileRuntime
+    readonly dshVersion = harness.dshVersion
     canRecoverProfile = harness.canRecoverProfile
     async mutate(_mutation: unknown, hooks: { beforeChange(): Promise<void>; afterChange(): Promise<void> }) {
       await hooks.beforeChange()
@@ -129,7 +161,12 @@ vi.mock('../src/project-manager.ts', () => ({
   },
 }))
 vi.mock('../src/host-process.ts', () => ({ DesktopHostProcess: harness.FakeHost }))
-vi.mock('../src/update-coordinator.ts', () => ({ DesktopUpdateCoordinator: vi.fn() }))
+vi.mock('../src/update-coordinator.ts', () => ({
+  DesktopUpdateCoordinator: class {
+    check(): Promise<ScriptedUpdateState> { return harness.updateCheck() }
+    install(): Promise<ScriptedUpdateState> { return harness.updateInstall() }
+  },
+}))
 
 function invoke(channel: string): unknown {
   const handler = harness.handlers.get(channel)
@@ -398,5 +435,104 @@ describe('desktop main startup', () => {
     expect(host.stop).toHaveBeenCalledTimes(1)
     expect(window.urls).toEqual(['dsh-app://shell/startup.html'])
     expect(harness.windows).toHaveLength(1)
+  })
+
+  it('names the version and the restart in the update confirmation', async () => {
+    harness.updateCheck.mockResolvedValue({ phase: 'available', version: '9.9.9' })
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+    await vi.advanceTimersByTimeAsync(10_000)
+    const confirmation = harness.dialog.showMessageBox.mock.calls
+      .map(([options]) => options)
+      .find(options => options.title === 'DeepSeek Harness Update')
+    expect(confirmation?.message).toContain('9.9.9')
+    expect(confirmation?.detail).toContain('restart')
+    expect(confirmation?.buttons).toEqual(['Install and Restart', 'Later'])
+    expect(harness.updateInstall).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed install with its reason and leaves the application running', async () => {
+    harness.updateCheck.mockResolvedValue({ phase: 'available', version: '9.9.9' })
+    harness.updateInstall.mockResolvedValue({ phase: 'error', version: '9.9.9', message: 'the disk is full' })
+    harness.dialog.showMessageBox.mockResolvedValue({ response: 0, checkboxChecked: false })
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(harness.updateInstall).toHaveBeenCalledOnce()
+    const failure = harness.dialog.showMessageBox.mock.calls
+      .map(([options]) => options)
+      .find(options => options.title === 'Update Failed')
+    expect(failure).toMatchObject({ type: 'error', message: 'the disk is full' })
+    expect(harness.app.quit).not.toHaveBeenCalled()
+    expect(harness.windows).toHaveLength(1)
+  })
+
+  it('offers the first-launch guide once the workspace opens', async () => {
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+    await Promise.resolve()
+    await Promise.resolve()
+    const guide = harness.dialog.showMessageBox.mock.calls
+      .map(([options]) => options)
+      .find(options => options.title === 'DeepSeek Harness is ready')
+    expect(guide?.type).toBe('info')
+    expect(guide?.message).toBe('This application runs on its own bundled runtime.')
+    expect(guide?.detail).toContain(join('desktop-test-closure', '1.0.0'))
+    expect(guide?.checkboxLabel).toBe("Don't show this again")
+  })
+
+  it('assembles the diagnostics payload in the main process', async () => {
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+    const payload = invoke(DESKTOP_IPC.diagnosticsGet) as {
+      applicationVersion: string
+      dshVersion: string
+      harnessHome: string
+      runtimeLocation: string
+      startupFailed: boolean
+      block: string
+    }
+    expect(payload).toMatchObject({
+      applicationVersion: '1.0.0',
+      dshVersion: '1.0.0',
+      harnessHome: 'desktop-test-root',
+      runtimeLocation: join('desktop-test-closure', '1.0.0'),
+      startupFailed: false,
+    })
+    expect(payload.block).toContain('Last start: Succeeded')
+  })
+
+  it('reports the last startup failure in the diagnostics payload', async () => {
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.exited.resolve()
+    harness.hosts[0]!.ready.reject(new Error('plugin composition failed'))
+    await harness.errorPublished.promise
+    const payload = invoke(DESKTOP_IPC.diagnosticsGet) as {
+      startupFailed: boolean
+      startupFailure?: string
+      block: string
+    }
+    expect(payload.startupFailed).toBe(true)
+    expect(payload.startupFailure).toBe('plugin composition failed')
+    expect(payload.block).toContain('Last start: Failed — plugin composition failed')
   })
 })

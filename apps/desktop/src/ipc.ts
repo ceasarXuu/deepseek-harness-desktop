@@ -3,6 +3,7 @@
 import type { DesktopBundleRecord, DesktopPluginRecord } from './project-manager.ts'
 import type { DesktopLocale } from './locale.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
+import type { DesktopDiagnostics } from './diagnostics.ts'
 
 /** IPC channel names kept private to the desktop application bundle. */
 export const DESKTOP_IPC = {
@@ -21,6 +22,8 @@ export const DESKTOP_IPC = {
   bundlesPickFile: 'dsh-desktop:bundles-pick-file',
   backendStatus: 'dsh-desktop:backend-status',
   backendRetry: 'dsh-desktop:backend-retry',
+  diagnosticsGet: 'dsh-desktop:diagnostics-get',
+  diagnosticsReveal: 'dsh-desktop:diagnostics-reveal',
   applicationRestart: 'dsh-desktop:application-restart',
   configurationReset: 'dsh-desktop:configuration-reset',
   backendState: 'dsh-desktop:backend-state',
@@ -60,6 +63,12 @@ export interface DshDesktopApi {
     status(): Promise<DesktopBackendState>
     retry(): Promise<void>
     subscribe(listener: (state: DesktopBackendState) => void): () => void
+  }
+  readonly diagnostics: {
+    /** Main-process installation facts, assembled without renderer filesystem access. */
+    get(): Promise<DesktopDiagnostics>
+    /** Open the Harness home in the file manager. */
+    reveal(): Promise<void>
   }
   readonly updates: {
     check(): Promise<DesktopUpdateState>

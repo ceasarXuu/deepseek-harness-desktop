@@ -15,6 +15,14 @@ const api: DshDesktopApi = {
     disableAll: () => ipcRenderer.invoke(DESKTOP_IPC.pluginsDisableAll) as Promise<void>,
     update: (name, version) => ipcRenderer.invoke(DESKTOP_IPC.pluginsUpdate, name, version) as Promise<void>,
   },
+  bundles: {
+    list: () => ipcRenderer.invoke(DESKTOP_IPC.bundlesList) as Promise<ReturnType<DshDesktopApi['bundles']['list']> extends Promise<infer T> ? T : never>,
+    installFromPath: path => ipcRenderer.invoke(DESKTOP_IPC.bundlesInstallFile, path) as Promise<void>,
+    installFromUrl: url => ipcRenderer.invoke(DESKTOP_IPC.bundlesInstallUrl, url) as Promise<void>,
+    setEnabled: (id, enabled) => ipcRenderer.invoke(DESKTOP_IPC.bundlesToggle, id, enabled) as Promise<void>,
+    remove: id => ipcRenderer.invoke(DESKTOP_IPC.bundlesRemove, id) as Promise<void>,
+    pickFile: () => ipcRenderer.invoke(DESKTOP_IPC.bundlesPickFile) as Promise<string | undefined>,
+  },
   backend: {
     status: () => ipcRenderer.invoke(DESKTOP_IPC.backendStatus) as ReturnType<DshDesktopApi['backend']['status']>,
     retry: () => ipcRenderer.invoke(DESKTOP_IPC.backendRetry) as Promise<void>,

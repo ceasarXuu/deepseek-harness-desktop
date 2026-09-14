@@ -1,6 +1,6 @@
 /** Typed preload operations exposed only by the Electron shell. */
 
-import type { DesktopPluginRecord } from './project-manager.ts'
+import type { DesktopBundleRecord, DesktopPluginRecord } from './project-manager.ts'
 import type { DesktopLocale } from './locale.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
 
@@ -13,6 +13,12 @@ export const DESKTOP_IPC = {
   pluginsUpdate: 'dsh-desktop:plugins-update',
   pluginsToggle: 'dsh-desktop:plugins-toggle',
   pluginsDisableAll: 'dsh-desktop:plugins-disable-all',
+  bundlesList: 'dsh-desktop:bundles-list',
+  bundlesInstallFile: 'dsh-desktop:bundles-install-file',
+  bundlesInstallUrl: 'dsh-desktop:bundles-install-url',
+  bundlesToggle: 'dsh-desktop:bundles-toggle',
+  bundlesRemove: 'dsh-desktop:bundles-remove',
+  bundlesPickFile: 'dsh-desktop:bundles-pick-file',
   backendStatus: 'dsh-desktop:backend-status',
   backendRetry: 'dsh-desktop:backend-retry',
   applicationRestart: 'dsh-desktop:application-restart',
@@ -41,6 +47,14 @@ export interface DshDesktopApi {
     update(name: string, version: string): Promise<void>
     toggle(name: string, enabled: boolean): Promise<void>
     disableAll(): Promise<void>
+  }
+  readonly bundles: {
+    list(): Promise<readonly DesktopBundleRecord[]>
+    installFromPath(path: string): Promise<void>
+    installFromUrl(url: string): Promise<void>
+    setEnabled(id: string, enabled: boolean): Promise<void>
+    remove(id: string): Promise<void>
+    pickFile(): Promise<string | undefined>
   }
   readonly backend: {
     status(): Promise<DesktopBackendState>

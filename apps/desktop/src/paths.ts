@@ -8,6 +8,8 @@ export interface DesktopPaths {
   readonly root: string
   readonly profile: string
   readonly lock: string
+  /** Directory whose per-version subdirectories hold each installed MCP bundle's payload. */
+  readonly plugins: string
   /** Directory whose per-version subdirectories hold the expanded runtime. */
   readonly closure: string
   readonly pnpm: {
@@ -32,6 +34,7 @@ export function resolveDesktopPaths(dshHome: string = resolveDshHome()): Desktop
     root,
     profile: join(dshHome, 'profiles', 'desktop'),
     lock: join(dshHome, 'profiles', 'desktop', 'lock'),
+    plugins: join(dshHome, 'plugins'),
     closure: join(dshHome, 'closure'),
     pnpm: {
       root: pnpm,

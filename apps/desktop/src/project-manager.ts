@@ -17,13 +17,14 @@ import {
   writeFileSync,
   writeSync,
 } from 'node:fs'
-import { delimiter, dirname, join, resolve, sep } from 'node:path'
+import { delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import {
   DESKTOP_HOST_PACKAGE,
   desktopCorePackageOverrides,
   verifyDesktopCorePackageSet,
 } from './core-package-set.ts'
 import type { DesktopPaths } from './paths.ts'
+import { McpBundleError, McpBundleStore, MCP_CLIENT_PACKAGE, type McpBundleRecord } from './mcp-bundles.ts'
 import { removeOwnedDirectory } from './owned-directory.ts'
 import type { DesktopRelease } from './release.ts'
 import { desktopRuntimeId, readDesktopRuntime, type DesktopRuntimeDescriptor } from './runtime-tree.ts'
@@ -38,6 +39,14 @@ export interface DesktopPluginRecord {
   readonly version: string
   readonly enabled: boolean
 }
+
+/** One installed MCP bundle as the plugin window lists it. */
+export type DesktopBundleRecord = McpBundleRecord
+
+/** Where one bundle install reads its archive from. */
+export type DesktopBundleInstallSource =
+  | { readonly kind: 'file'; readonly path: string }
+  | { readonly kind: 'url'; readonly url: string }
 
 /** Installed desktop project manifest slice. */
 interface DesktopProjectManifest {
@@ -74,6 +83,9 @@ export type DesktopProjectMutation =
   | { readonly type: 'plugin-update'; readonly name: string; readonly version: string }
   | { readonly type: 'plugin-toggle'; readonly name: string; readonly enabled: boolean }
   | { readonly type: 'plugins-disable-all' }
+  | { readonly type: 'bundle-install'; readonly source: DesktopBundleInstallSource }
+  | { readonly type: 'bundle-remove'; readonly id: string }
+  | { readonly type: 'bundle-toggle'; readonly id: string; readonly enabled: boolean }
 
 const PROJECT_NAME = '@deepseek-ai/dsh-desktop-runtime'
 const DSH_PACKAGE = '@deepseek-ai/dsh'
@@ -146,6 +158,25 @@ export function packageNameFromSpec(spec: string): string {
   return name
 }
 
+/**
+ * Decide whether one dependency spec is a `file:` path inside the profile.
+ *
+ * A generated bundle plugin is not a registry package: the profile records it
+ * as the path its generated directory occupies, and nothing else about the
+ * entry format is relaxed — the path must stay strictly inside the profile, so
+ * a manifest cannot reach a directory pnpm would then install from.
+ * @param projectDir - the profile directory the spec is relative to.
+ * @param spec - the dependency spec from the manifest.
+ * @returns whether the spec is a profile-local `file:` path.
+ */
+function isProfileFilePathSpec(projectDir: string, spec: string): boolean {
+  if (!spec.startsWith('file:')) return false
+  const declared = spec.slice('file:'.length)
+  if (declared === '' || isAbsolute(declared) || declared.includes('\\') || declared.includes(':')) return false
+  const target = resolve(projectDir, declared)
+  return target !== projectDir && target.startsWith(projectDir + sep)
+}
+
 function projectManifest(projectDir: string): DesktopProjectManifest {
   const path = join(projectDir, 'package.json')
   const value = readJson(path)
@@ -158,8 +189,9 @@ function projectManifest(projectDir: string): DesktopProjectManifest {
   }
   const manifest = { ...value, dependencies: value.dependencies ?? {} } as unknown as DesktopProjectManifest
   if (Object.entries(manifest.dependencies).some(([name, version]) => !PACKAGE_NAME_PATTERN.test(name)
-    || typeof version !== 'string' || valid(version) !== version)) {
-    throw new Error('desktop project: plugin dependencies must use exact registry versions')
+    || typeof version !== 'string'
+    || (valid(version) !== version && !isProfileFilePathSpec(projectDir, version)))) {
+    throw new Error('desktop project: plugin dependencies must use exact registry versions or a file: path inside the profile')
   }
   return manifest
 }
@@ -239,6 +271,20 @@ export class DesktopProjectManager {
   }
 
   /**
+   * Read the installed MCP bundles.
+   *
+   * Activation is read back from the profile rather than the registry, so a
+   * profile that was reset or edited shows what will actually mount.
+   * @returns every installed bundle, in install order.
+   */
+  listBundles(): readonly DesktopBundleRecord[] {
+    const records = this.bundleStore().list()
+    if (!existsSync(this.paths.profile)) return records
+    const active = projectManifest(this.paths.profile).dsh.profile.bundles
+    return records.map(record => ({ ...record, enabled: active.includes(record.name) }))
+  }
+
+  /**
    * Reinitialize the profile, deleting configuration and third-party packages without a backup.
    * @param hooks - Stop the Host before resetting files; restart after preparation succeeds.
    * @returns Completion of reset; the held lock and shared product data are preserved.
@@ -285,6 +331,34 @@ export class DesktopProjectManager {
   }
 
   private get pendingPackages(): string { return join(this.paths.profile, 'desktop-packages-pending') }
+
+  /**
+   * The bundle store this manager acts through.
+   *
+   * The host peers come from the loaded runtime descriptor, so a generated
+   * plugin declares exactly the `@deepseek-ai/dsh-mcp-client` build this
+   * application carries; a listing before startup simply declares no peer.
+   * @returns a store bound to this profile and its payload directory.
+   */
+  private bundleStore(): McpBundleStore {
+    const peerPackages: Record<string, string> = {}
+    for (const entry of this.descriptor?.sharedPackages ?? []) {
+      if (entry.name === MCP_CLIENT_PACKAGE) peerPackages[entry.name] = entry.version
+    }
+    return new McpBundleStore({
+      pluginsDir: this.paths.plugins,
+      profileDir: this.paths.profile,
+      nodeRuntime: this.runtime.node,
+      peerPackages,
+    })
+  }
+
+  /** Read one installed bundle's record, or refuse an id nothing was installed under. */
+  private bundleRecord(id: string): McpBundleRecord {
+    const record = this.bundleStore().list().find(entry => entry.id === id)
+    if (record === undefined) throw new McpBundleError('not-found', `no bundle installed as ${JSON.stringify(id)}`)
+    return record
+  }
 
   private currentRuntime(): DesktopRuntimeDescriptor {
     if (this.descriptor === undefined) throw new Error('desktop project: runtime metadata has not been loaded')
@@ -339,7 +413,7 @@ export class DesktopProjectManager {
         return
       }
       const previous = readDesktopProfileState(this.paths.profile)
-      const packagesChanged = mutation.type !== 'plugin-toggle'
+      const packagesChanged = mutation.type !== 'plugin-toggle' && mutation.type !== 'bundle-toggle'
       if (packagesChanged) unlinkDesktopHostPackages(this.paths.profile)
       try {
         await this.applyMutation(this.paths.profile, mutation)
@@ -421,6 +495,52 @@ export class DesktopProjectManager {
         writeProfilePlugins(projectDir, plugins.map(plugin => (
           plugin.name === mutation.name ? { ...plugin, enabled: mutation.enabled } : plugin
         )))
+        return
+      }
+      case 'bundle-install': {
+        const record = mutation.source.kind === 'file'
+          ? await this.bundleStore().installFromFile(mutation.source.path)
+          : await this.bundleStore().installFromUrl(mutation.source.url)
+        // The generated plugin is not a registry package, so the profile
+        // records the directory it occupies and pnpm materializes it from
+        // there — the only dependency form this manager accepts beyond an
+        // exact registry version.
+        const manifest = projectManifest(projectDir)
+        writeJson(join(projectDir, 'package.json'), {
+          ...manifest,
+          dependencies: { ...manifest.dependencies, [record.name]: record.spec },
+          dsh: {
+            ...manifest.dsh,
+            profile: {
+              ...manifest.dsh.profile,
+              bundles: [...manifest.dsh.profile.bundles.filter(name => name !== record.name), record.name],
+            },
+          },
+        } satisfies DesktopProjectManifest)
+        await this.runPnpm(projectDir, ['install', '--ignore-scripts'])
+        writeProfilePlugins(projectDir, pluginRecords(projectDir))
+        return
+      }
+      case 'bundle-remove': {
+        const record = this.bundleRecord(mutation.id)
+        if (Object.hasOwn(projectManifest(projectDir).dependencies, record.name)) {
+          const remaining = pluginRecords(projectDir).filter(plugin => plugin.name !== record.name)
+          await this.runPnpm(projectDir, ['remove', record.name, '--config.ignore-scripts=true'])
+          writeProfilePlugins(projectDir, remaining)
+        }
+        await this.bundleStore().remove(mutation.id)
+        return
+      }
+      case 'bundle-toggle': {
+        const record = this.bundleRecord(mutation.id)
+        const plugins = pluginRecords(projectDir)
+        if (!plugins.some(plugin => plugin.name === record.name)) {
+          throw new Error(`desktop project: bundle ${JSON.stringify(mutation.id)} is not installed in this profile`)
+        }
+        writeProfilePlugins(projectDir, plugins.map(plugin => (
+          plugin.name === record.name ? { ...plugin, enabled: mutation.enabled } : plugin
+        )))
+        await this.bundleStore().setEnabled(mutation.id, mutation.enabled)
         return
       }
       default:

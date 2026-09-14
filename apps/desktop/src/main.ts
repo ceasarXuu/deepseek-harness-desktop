@@ -25,6 +25,8 @@ import { startupFailureDocument } from './startup-document.ts'
 import { DESKTOP_RUNTIME_ARCHIVE, ensureDesktopRuntime, type DesktopRuntimeProgress } from './runtime-closure.ts'
 
 const SCHEME = 'dsh-app'
+/** Extensions the bundle chooser offers: the MCP Bundle format and its predecessors. */
+const BUNDLE_FILE_EXTENSIONS = ['mcpb', 'dxt', 'zip'] as const
 let focusPrimaryWindow = (): void => {}
 type RecoveryAction = 'restart' | 'plugins' | 'reset'
 let profileRecoveryAvailable = (): boolean => false
@@ -317,7 +319,7 @@ async function main(): Promise<void> {
     return active.fetch(request)
   })
 
-  const mutate = async (event: IpcMainInvokeEvent, mutation: Parameters<DesktopProjectManager['mutate']>[0]): Promise<void> => {
+  const transaction = async (event: IpcMainInvokeEvent, operation: () => Promise<void>): Promise<void> => {
     assertDesktopSender(event, ['shell'])
     if (development !== undefined) {
       throw new Error('dsh desktop: plugin package changes require a packaged application')
@@ -326,13 +328,15 @@ async function main(): Promise<void> {
     pageError = undefined
     await navigateMain(startupUrl)
     try {
-      await manager.mutate(mutation, hooks)
+      await operation()
       await navigateMain(applicationUrl)
     } catch (error) {
       await showStartupError(error)
       throw error
     }
   }
+  const mutate = (event: IpcMainInvokeEvent, mutation: Parameters<DesktopProjectManager['mutate']>[0]): Promise<void> =>
+    transaction(event, () => manager.mutate(mutation, hooks))
   ipcMain.handle(DESKTOP_IPC.localeGet, (event) => {
     assertDesktopSender(event, ['shell'])
     return locale
@@ -361,6 +365,35 @@ async function main(): Promise<void> {
     return mutate(event, { type: 'plugin-toggle', name, enabled })
   })
   ipcMain.handle(DESKTOP_IPC.pluginsDisableAll, event => mutate(event, { type: 'plugins-disable-all' }))
+  ipcMain.handle(DESKTOP_IPC.bundlesList, (event) => {
+    assertDesktopSender(event, ['shell'])
+    if (development !== undefined) return []
+    return manager.listBundles()
+  })
+  ipcMain.handle(DESKTOP_IPC.bundlesInstallFile, (event, path: unknown) => {
+    if (typeof path !== 'string') throw new Error('dsh desktop: bundle path must be a string')
+    return transaction(event, () => manager.mutate({ type: 'bundle-install', source: { kind: 'file', path } }, hooks))
+  })
+  ipcMain.handle(DESKTOP_IPC.bundlesInstallUrl, (event, url: unknown) => {
+    if (typeof url !== 'string') throw new Error('dsh desktop: bundle URL must be a string')
+    return transaction(event, () => manager.mutate({ type: 'bundle-install', source: { kind: 'url', url } }, hooks))
+  })
+  ipcMain.handle(DESKTOP_IPC.bundlesToggle, (event, id: unknown, enabled: unknown) => {
+    if (typeof id !== 'string' || typeof enabled !== 'boolean') throw new Error('dsh desktop: invalid bundle activation request')
+    return transaction(event, () => manager.mutate({ type: 'bundle-toggle', id, enabled }, hooks))
+  })
+  ipcMain.handle(DESKTOP_IPC.bundlesRemove, (event, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('dsh desktop: bundle id must be a string')
+    return transaction(event, () => manager.mutate({ type: 'bundle-remove', id }, hooks))
+  })
+  ipcMain.handle(DESKTOP_IPC.bundlesPickFile, async (event) => {
+    assertDesktopSender(event, ['shell'])
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: messages.bundleFileFilter, extensions: [...BUNDLE_FILE_EXTENSIONS] }],
+    })
+    return result.canceled ? undefined : result.filePaths[0]
+  })
   ipcMain.handle(DESKTOP_IPC.backendStatus, (event) => {
     assertDesktopSender(event, ['shell'])
     return backendState()

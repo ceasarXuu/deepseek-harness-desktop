@@ -35,6 +35,31 @@
         <ul id="plugins"></ul>
         <p id="empty"></p>
       </section>
+      <section aria-labelledby="bundles-heading">
+        <h2 id="bundles-heading"></h2>
+        <p id="bundles-description"></p>
+        <p id="bundle-notice" class="notice"></p>
+        <form id="bundle-file-form">
+          <label id="bundle-file-label" for="bundle-file"></label>
+          <div class="install-row">
+            <input id="bundle-file" name="bundle-file" autocomplete="off" readonly>
+            <button id="bundle-choose" class="quiet" type="button"></button>
+            <button id="bundle-install-file" type="submit"></button>
+          </div>
+        </form>
+        <form id="bundle-url-form">
+          <label id="bundle-url-label" for="bundle-url"></label>
+          <div class="install-row">
+            <input id="bundle-url" name="bundle-url" autocomplete="off" required>
+            <button id="bundle-install-url" type="submit"></button>
+          </div>
+        </form>
+        <section aria-labelledby="bundles-installed-heading">
+          <h3 id="bundles-installed-heading"></h3>
+          <ul id="bundles"></ul>
+          <p id="bundles-empty"></p>
+        </section>
+      </section>
     </main>
     <script src="plugin-manager.js"></script>
   </body>

@@ -489,6 +489,9 @@ importers:
       electron-updater:
         specifier: ^6.8.9
         version: 6.8.9
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       semver:
         specifier: ^7.8.5
         version: 7.8.5

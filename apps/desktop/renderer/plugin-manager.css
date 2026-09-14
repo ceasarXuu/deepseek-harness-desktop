@@ -106,3 +106,39 @@ li {
   display: flex;
   gap: 8px;
 }
+
+h3 {
+  font-size: 1em;
+  margin-bottom: 4px;
+}
+
+.notice {
+  color: GrayText;
+  font-size: 0.9em;
+}
+
+#bundles li {
+  align-items: flex-start;
+}
+
+.bundle-identity {
+  font-weight: 600;
+}
+
+.bundle-facts {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 12px;
+  color: GrayText;
+  font-size: 0.9em;
+}
+
+.bundle-source {
+  overflow-wrap: anywhere;
+}
+
+.package-detail {
+  color: CanvasText;
+}

@@ -88,6 +88,9 @@ export function createElectronBuilderConfig(
     ],
     mac: {
       category: 'public.app-category.developer-tools',
+      // The dark application icon lives in the fork's `desktop/build/icons` subtree, which kept
+      // the deleted shell's assets; nothing in upstream's configuration set one.
+      icon: '../../desktop/build/icons/icon-dark.icns',
       identity: macOSSigning?.signingIdentity,
       forceCodeSigning: true,
       hardenedRuntime: true,

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-14-desktop-experience-surfaces.md
-2026-09-14-desktop-experience-surfaces.md: 878c72d4be9b7662e1bd0f32c40360c2341c93a5
-2026-09-14-desktop-experience-surfaces.zh.md: 3740be7dd5b69b45610bfcccbdab76d0fab68f88
+2026-09-14-desktop-experience-surfaces.md: fb297e375f37023cdfacfac1d220f8d31103f38c
+2026-09-14-desktop-experience-surfaces.zh.md: 0fae18e9e489f808a3f3d1f00efeebaf59b389f0

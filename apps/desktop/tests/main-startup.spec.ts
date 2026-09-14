@@ -475,24 +475,6 @@ describe('desktop main startup', () => {
     expect(harness.windows).toHaveLength(1)
   })
 
-  it('offers the first-launch guide once the workspace opens', async () => {
-    await import('../src/main.ts')
-    await harness.preparing.promise
-    harness.prepared.resolve()
-    await harness.hostStarted.promise
-    harness.hosts[0]!.ready.resolve()
-    await harness.navigated.promise
-    await Promise.resolve()
-    await Promise.resolve()
-    const guide = harness.dialog.showMessageBox.mock.calls
-      .map(([options]) => options)
-      .find(options => options.title === 'DeepSeek Harness is ready')
-    expect(guide?.type).toBe('info')
-    expect(guide?.message).toBe('This application runs on its own bundled runtime.')
-    expect(guide?.detail).toContain(join('desktop-test-closure', '1.0.0'))
-    expect(guide?.checkboxLabel).toBe("Don't show this again")
-  })
-
   it('assembles the diagnostics payload in the main process', async () => {
     await import('../src/main.ts')
     await harness.preparing.promise

@@ -1,6 +1,5 @@
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
-import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -25,11 +24,6 @@ import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { startupFailureDocument } from './startup-document.ts'
 import { assembleDesktopDiagnostics } from './diagnostics.ts'
-import {
-  readFirstLaunchGuideAcknowledged,
-  shouldShowFirstLaunchGuide,
-  writeFirstLaunchGuideAcknowledged,
-} from './first-launch.ts'
 import { DESKTOP_RUNTIME_ARCHIVE, ensureDesktopRuntime, type DesktopRuntimeProgress } from './runtime-closure.ts'
 
 const SCHEME = 'dsh-app'
@@ -186,10 +180,6 @@ async function main(): Promise<void> {
     : process.env.DSH_DESKTOP_DSH_DIR ?? development)
   const manager = new DesktopProjectManager(paths, resources)
   profileRecoveryAvailable = () => development === undefined && manager.canRecoverProfile()
-  // The guide belongs to the first start of an installed application: a development
-  // project, and a launch that found an existing profile, both skip it.
-  const profileExisted = development !== undefined || existsSync(paths.profile)
-  let firstLaunchGuideOffered = false
   let pageError: Extract<DesktopBackendState, { phase: 'error' }> | undefined
   let quitting = false
   let startup: Promise<void> | undefined
@@ -212,28 +202,6 @@ async function main(): Promise<void> {
     const diagnostic = desktopErrorState(error).message
     pageError = { phase: 'error', message: diagnostic }
     if (mainWindow !== undefined) await showEmergencyDocument(mainWindow, diagnostic)
-  }
-
-  const offerFirstLaunchGuide = async (): Promise<void> => {
-    if (firstLaunchGuideOffered) return
-    if (!shouldShowFirstLaunchGuide({
-      profileExisted,
-      acknowledged: readFirstLaunchGuideAcknowledged(paths.root),
-    })) return
-    firstLaunchGuideOffered = true
-    const result = await dialog.showMessageBox({
-      type: 'info',
-      title: messages.firstLaunchGuideTitle,
-      message: messages.firstLaunchGuideMessage,
-      detail: formatDesktopMessage(messages.firstLaunchGuideDetail, {
-        runtime: join(paths.closure, app.getVersion()),
-      }),
-      buttons: [messages.firstLaunchGuideDismiss],
-      checkboxLabel: messages.firstLaunchGuideDontShowAgain,
-      checkboxChecked: false,
-    })
-    // The record lives beside the profile, not inside it, so it survives a reset.
-    if (result.checkboxChecked) writeFirstLaunchGuideAcknowledged(paths.root)
   }
 
   const navigateMain = (url: string): Promise<void> => {
@@ -324,7 +292,6 @@ async function main(): Promise<void> {
       })
       if (backend.host !== undefined) {
         await navigateMain(applicationUrl)
-        void offerFirstLaunchGuide().catch((error: unknown) => { console.error(error) })
       }
     })().catch(async (error: unknown) => {
       await showStartupError(error)

@@ -1,4 +1,4 @@
-# Agent Note: Desktop recovery, updates, first launch, and diagnostics
+# Agent Note: Desktop recovery, updates, and diagnostics
 
 Status: implemented
 
@@ -8,7 +8,7 @@ These surfaces belong to the [adopted upstream application](../architecture/2026
 
 ## Problem
 
-The adopted application shipped the recovery, update, first-launch, and diagnostics surfaces the fork's roadmap asked for, but each was incomplete for the user it exists for — someone with no terminal, no package manager, and no Node.js. The failure page said only that startup failed and left its three actions unexplained, so the two that change the profile looked as safe as restart. A declined update could be forgotten when a later re-check failed, and a failed download or restart handoff was silent. The first start of an installed application said nothing about the runtime it carries or where to manage plugins. The management window had nowhere to read the versions and paths a support request needs. This note records what each surface now promises, where its state lives, and why each was built in the shell.
+The adopted application shipped the recovery, update, and diagnostics surfaces the fork's roadmap asked for, but each was incomplete for the user it exists for — someone with no terminal, no package manager, and no Node.js. The failure page said only that startup failed and left its three actions unexplained, so the two that change the profile looked as safe as restart. A declined update could be forgotten when a later re-check failed, and a failed download or restart handoff was silent. The management window had nowhere to read the versions and paths a support request needs. This note records what each surface now promises, where its state lives, and why each was built in the shell.
 
 ## Decision
 
@@ -20,23 +20,18 @@ The local loading page renders the failure text from the main process and explai
 
 A check publishes its phase to every window and retains the available version. The native confirmation names that version and states that the release includes its matching dsh runtime and that the application restarts to finish installing, so the version and the restart are visible before the user accepts. Declining leaves the release known, so a later check that cannot reach the feed reports its error beside the retained version rather than replacing it, and the release stays installable. Accepting waits for an in-flight check and then downloads and verifies the release; a failed download is reported and leaves the release retryable. Once the download succeeds the application stops the dsh child and hands installation plus restart to electron-updater, and a failed handoff is reported too: the application keeps running on the old release with the update still installable.
 
-### First launch is a native dialog over Electron-owned state
-
-An installed application that started without a profile shows one native guide after the workspace opens, stating the runtime it carries, where that runtime lives, and where plugins are managed. The guide is driven by Electron main-process state rather than a client package because it speaks for a first start whose workspace may not have opened yet, and the shell already owns the locale payload and the profile's surroundings. Its "Don't show this again" choice is written under `$DSH_HOME/desktop/`, beside the profile, so it survives a profile reset; a launch that found an existing profile, or any development project, never shows the guide.
-
 ### Diagnostics lives in the management window
 
 The management window gains a Diagnostics section listing the application and dsh versions, the Harness home, the runtime location, and the last start's outcome, with a copy action for one assembled block and a reveal action for the Harness home. The block is assembled once in the main process from main-process facts and locale labels, so the renderer renders one payload and copies exactly what it shows, reads no filesystem, and invokes no shell; a version it cannot read yet shows as unavailable rather than failing the section. The facts are added to the window that already owns the profile and already carries a preload, a locale payload, and a menu entry, rather than to a new window that would duplicate that wiring for five read-only rows.
 
 ## Alternatives considered
 
-- **Show the first-launch guide from a client package.** Rejected: the guide exists for the first start of an installed application, before the renderer's own surfaces are trustworthy, and a client package would add a route, a bridge, and a persisted store to render copy the shell already localizes. The native dialog uses the state and locale the main process owns, and one file beside the profile survives the reset a client store inside the profile would not.
 - **Give diagnostics their own window.** Rejected: the management window already owns the profile and already carries the preload, locale payload, and menu entry, so the installation facts belong in the surface that already speaks for the installation. A second window would duplicate all of that to show five read-only rows and to reach the same `$DSH_HOME`.
 - **Forget a declined release when a re-check fails.** Rejected: the declined version is exactly the fact a user needs when the feed later stops answering, and forgetting it would turn a transient check failure into "no update available". Retaining it keeps Install reachable after the fact, which is the point of having confirmed the release once.
 - **Offer every recovery action in every failure.** Rejected: disabling plugins and resetting Desktop mutate the profile, so offering them where packaged resources cannot repair it, or where no profile exists yet, would present actions that cannot run. Gating them on profile recovery keeps the page honest, and restart is the one action every context can perform.
 
 ## Consequences
 
-The failure page now names the failure and explains each action, and its profile-mutating actions appear only where they can run, so a context that cannot repair a profile no longer offers actions that would fail; the busy state means a slow recovery no longer leaves the page looking unchanged. A declined update stays installable across a failed re-check, and a failed download or restart handoff is reported rather than silent. The first-launch guide introduces the bundled runtime and the plugin window once, and its acknowledgement lives beside the profile, so a reset brings the application back without repeating a guide the user already dismissed. Diagnostics turns the versions and paths a support request needs into one copied block, assembled in the main process with no filesystem access in the renderer.
+The failure page now names the failure and explains each action, and its profile-mutating actions appear only where they can run, so a context that cannot repair a profile no longer offers actions that would fail; the busy state means a slow recovery no longer leaves the page looking unchanged. A declined update stays installable across a failed re-check, and a failed download or restart handoff is reported rather than silent. Diagnostics turns the versions and paths a support request needs into one copied block, assembled in the main process with no filesystem access in the renderer.
 
-The costs are the ones these choices name: the guide is a native dialog, so it uses the shell's copy and cannot be styled with the application; a retained declined release can stay offered after the feed stops answering, which the error text must explain; and the diagnostics block mirrors locale labels, so a new fact is added in both dictionaries and is covered by the section's tests.
+The costs are the ones these choices name: a retained declined release can stay offered after the feed stops answering, which the error text must explain; and the diagnostics block mirrors locale labels, so a new fact is added in both dictionaries and is covered by the section's tests.

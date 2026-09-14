@@ -34,6 +34,7 @@ DeepSeek Harness 的桌面发行版：一个已签名、自包含的 macOS 应�
 | [`apps/desktop/scripts/prepare-dsh.ts`](../apps/desktop/scripts/prepare-dsh.ts) | 打包已验证的依赖树，并证明归档能还原出它 | 当打包内容不是被验证的内容时，构建必须失败 |
 | [`apps/desktop/scripts/desktop-build-paths.mjs`](../apps/desktop/scripts/desktop-build-paths.mjs)（含 [`.d.mts`](../apps/desktop/scripts/desktop-build-paths.d.mts)） | 增加归档与摘要路径 | 每个目标拥有自己的归档 |
 | [`apps/desktop/electron-builder.config.mjs`](../apps/desktop/electron-builder.config.mjs)（含 [`.d.mts`](../apps/desktop/electron-builder.config.d.mts)） | 携带归档与摘要而非散文件树，在 `afterPack`/`afterSign` 校验，并以 `github` provider 发布 | 资源映射、构建期校验与发布目标都在此配置 |
+| [`apps/desktop/electron-builder.config.mjs`](../apps/desktop/electron-builder.config.mjs) | 把 `mac.icon` 设为 [`desktop/build/icons/icon-dark.icns`](build/icons) | 打包从未设置图标，macOS 因此回退到 Electron 默认图标；该图标位于本子树，是因为本 fork 删除的壳把它作为资产保留在此 |
 | [`apps/desktop/scripts/desktop-auto-update-environment.mjs`](../apps/desktop/scripts/desktop-auto-update-environment.mjs)（含 [`.d.mts`](../apps/desktop/scripts/desktop-auto-update-environment.d.mts)） | 解析 GitHub 仓库、发布 tag 与发布类型，取代腾讯 COS origin 与 bucket | 本 fork 发布到自己的仓库 |
 | [`apps/desktop/scripts/desktop-upload-plan.ts`](../apps/desktop/scripts/desktop-upload-plan.ts)、[`apps/desktop/scripts/upload-target.ts`](../apps/desktop/scripts/upload-target.ts) | 验证同样的产物并作为 GitHub release 资源上传 | 带校验的上传才是重点，只有传输方式改变 |
 | [`apps/desktop/src/desktop-update-metadata.ts`](../apps/desktop/src/desktop-update-metadata.ts)、[`apps/desktop/tests/desktop-update-metadata.spec.ts`](../apps/desktop/tests/desktop-update-metadata.spec.ts) | 新增模块与测试：写出 `app-update.yml` 与频道元数据 | electron-builder 只在构建安装器目标的那一趟产出它们，而本应用是从已打包目录构建安装器的 |
@@ -51,7 +52,7 @@ DeepSeek Harness 的桌面发行版：一个已签名、自包含的 macOS 应�
 | 路径 | 状态 | 保留原因 |
 |---|---|---|
 | [`packages/plugin-store`](packages/plugin-store)、[`packages/ui-plugin-store`](packages/ui-plugin-store) | 在工作区之外：既不构建也不运行 | 它们承载的能力现以 [`apps/desktop/src/mcp-bundles.ts`](../apps/desktop/src/mcp-bundles.ts)（安装、注册表、生成的插件）与插件窗的 MCP 包区块交付；这两个包仅作为更早的实现保留 |
-| [`build/icons`](build/icons)、[`build/entitlements.mac.plist`](build/entitlements.mac.plist) | 当前打包未使用 | 上游配置使用 Electron 默认图标，因此启用这些图标属于需要单独验收的产品改动 |
+| [`build/icons`](build/icons)、[`build/entitlements.mac.plist`](build/entitlements.mac.plist) | 深色图标已用于 macOS 打包；其余图标与该 entitlements 文件仍未使用 | 只有 [`icon-dark.icns`](build/icons) 被上游配置引用，因此浅色、透明与通用图标继续休眠；上游配置不使用 entitlements 文件 |
 | [`docs/releases`](docs/releases/README.zh.md) | 历史发布规划 | 记录每个版本当初的目标 |
 
 ## 标签与发布

@@ -9,6 +9,8 @@ A release directory describes intended state and is revised until the version sh
 | Version | Status | Target | Docs |
 |---|---|---|---|
 | 0.0.1 | Proposed | macOS (Apple Silicon) | [`v0.0.1`](v0.0.1/README.md) |
+| 0.0.2 | Proposed | macOS (Apple Silicon) | [`v0.0.2`](v0.0.2/README.md) |
+| 0.0.4 | Proposed | macOS (Apple Silicon, Intel) | [`v0.0.4`](v0.0.4/README.md) |
 
 ## Document roles within a release
 

@@ -32,7 +32,7 @@ export interface DesktopUploadAsset {
   readonly channelMetadata: boolean
 }
 
-/** A fully validated upload operation with channel metadata ordered last. */
+/** A fully validated upload operation with any channel metadata ordered last. */
 export interface DesktopUploadPlan {
   readonly environment: 'test' | 'production'
   readonly target: DesktopPackageTargetName
@@ -148,9 +148,14 @@ function uploadAsset(path: string, contentType: string, channelMetadata = false)
 
 /**
  * Validate the completed package record, dsh version, update metadata, hashes, and target files.
+ *
+ * A macOS lane validates the channel file it wrote beside its own artifacts — that file names the
+ * lane's ZIP, so it proves the digest and size the release will carry — but it does not upload it:
+ * one release needs one `<channel>-mac.yml` naming every architecture, and the `finalize` step
+ * publishes that merged file after both lanes finish.
  * @param targetName - Fixed platform and architecture selected by the upload command.
  * @param options - Optional filesystem roots and environment for tests or release automation.
- * @returns An upload plan whose mutable channel metadata is the final asset.
+ * @returns An upload plan whose mutable channel metadata, when it has one, is the final asset.
  */
 export async function createDesktopUploadPlan(
   targetName: DesktopPackageTargetName,
@@ -224,9 +229,9 @@ export async function createDesktopUploadPlan(
       updaterPath,
       'application/vnd.microsoft.portable-executable',
     ))
+    assets.push(uploadAsset(metadataPath, 'application/yaml', true))
   }
 
-  assets.push(uploadAsset(metadataPath, 'application/yaml', true))
   return {
     environment: update.environment,
     target: targetName,

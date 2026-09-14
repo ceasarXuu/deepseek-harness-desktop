@@ -149,6 +149,30 @@ export function resolveDesktopUploadToken(env) {
 }
 
 /**
+ * Resolve the GitHub release one version publishes to, without selecting an architecture.
+ *
+ * A step that acts on the whole release (the merged macOS channel file is written for every
+ * architecture at once) has no single target directory, so this resolves only the deployment
+ * and the tag it publishes.
+ * @param {NodeJS.ProcessEnv} env - Release environment.
+ * @param {string} version - Desktop semantic version being released.
+ * @returns {{ environment: 'test' | 'production', owner: string, repo: string, tag: string, releaseType: 'release' | 'prerelease', publicUrl: string }} Resolved release destination.
+ */
+export function resolveDesktopReleaseDestination(env, version) {
+  const environment = resolveDesktopAutoUpdateEnvironment(env)
+  const { owner, repo } = deploymentRepository(env, UPDATE_ENVIRONMENTS[environment])
+  const tag = desktopReleaseTag(version)
+  return {
+    environment,
+    owner,
+    repo,
+    tag,
+    releaseType: prerelease(version) === null ? 'release' : 'prerelease',
+    publicUrl: `https://github.com/${owner}/${repo}/releases/download/${tag}/`,
+  }
+}
+
+/**
  * Resolve the release destination for one target.
  * @param {NodeJS.ProcessEnv} env - Packaging or upload environment.
  * @param {NodeJS.Platform} platform - Target Node.js platform.
@@ -158,19 +182,11 @@ export function resolveDesktopUploadToken(env) {
  * @throws {Error} When the selected deployment lacks a repository, or the version is not semantic.
  */
 export function resolveDesktopAutoUpdateConfig(env, platform, arch, version) {
-  const environment = resolveDesktopAutoUpdateEnvironment(env)
   const target = resolveDesktopAutoUpdateTarget(platform, arch)
-  const { owner, repo } = deploymentRepository(env, UPDATE_ENVIRONMENTS[environment])
-  const tag = desktopReleaseTag(version)
   const metadataFilename = desktopUpdateMetadataFilename(version, platform)
   return {
-    environment,
+    ...resolveDesktopReleaseDestination(env, version),
     target,
-    owner,
-    repo,
-    tag,
-    releaseType: prerelease(version) === null ? 'release' : 'prerelease',
     metadataFilename,
-    publicUrl: `https://github.com/${owner}/${repo}/releases/download/${tag}/`,
   }
 }

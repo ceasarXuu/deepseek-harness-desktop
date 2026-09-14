@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -92,7 +92,7 @@ afterEach(async () => {
 })
 
 describe('desktop upload plan', () => {
-  it('validates macOS artifacts and puts channel metadata last', async () => {
+  it('validates macOS artifacts and uploads no channel metadata', async () => {
     const paths = await fixture('mac-arm64')
     const plan = await createDesktopUploadPlan('mac-arm64', paths)
     expect(plan).toMatchObject({
@@ -108,15 +108,13 @@ describe('desktop upload plan', () => {
       'deepseek-harness-1.2.3-mac-arm64.dmg',
       'deepseek-harness-1.2.3-mac-arm64.zip',
       'deepseek-harness-1.2.3-mac-arm64.zip.blockmap',
-      'latest-mac.yml',
     ])
-    expect(plan.assets.at(-1)).toMatchObject({
-      channelMetadata: true,
-      contentType: 'application/yaml',
-    })
+    // The lane writer's `latest-mac.yml` is validated above but never uploaded: `finalize`
+    // publishes the one merged `<channel>-mac.yml` after both lanes finish.
+    expect(plan.assets.map(asset => asset.channelMetadata)).toEqual([false, false, false])
   })
 
-  it('uploads the prerelease channel metadata emitted by electron-builder', async () => {
+  it('names the lane artifacts of a prerelease and leaves the channel file to the finalize step', async () => {
     const paths = await fixture('mac-arm64', '1.2.3-alpha.4')
     const plan = await createDesktopUploadPlan('mac-arm64', paths)
     expect(plan).toMatchObject({ tag: 'v1.2.3-alpha.4', releaseType: 'prerelease' })
@@ -124,8 +122,26 @@ describe('desktop upload plan', () => {
       'deepseek-harness-1.2.3-alpha.4-mac-arm64.dmg',
       'deepseek-harness-1.2.3-alpha.4-mac-arm64.zip',
       'deepseek-harness-1.2.3-alpha.4-mac-arm64.zip.blockmap',
-      'alpha-mac.yml',
     ])
+  })
+
+  it('keeps validating the lane channel file whose ZIP digest it states', async () => {
+    const paths = await fixture('mac-x64')
+    const zipPath = join(paths.artifactsRoot, 'deepseek-harness-1.2.3-mac-x64.zip')
+    const zip = await readFile(zipPath)
+    const plan = await createDesktopUploadPlan('mac-x64', paths)
+    expect(plan.assets.map(asset => asset.filename)).toEqual([
+      'deepseek-harness-1.2.3-mac-x64.dmg',
+      'deepseek-harness-1.2.3-mac-x64.zip',
+      'deepseek-harness-1.2.3-mac-x64.zip.blockmap',
+    ])
+
+    await writeFile(zipPath, 'tampered zip')
+    await expect(createDesktopUploadPlan('mac-x64', paths)).rejects.toThrow(/size.*metadata/u)
+
+    await writeFile(zipPath, zip)
+    await rm(join(paths.artifactsRoot, 'latest-mac.yml'))
+    await expect(createDesktopUploadPlan('mac-x64', paths)).rejects.toThrow(/cannot read update metadata/u)
   })
 
   it('validates the Windows installer with its embedded blockmap and production repository', async () => {

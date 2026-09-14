@@ -25,6 +25,16 @@ export interface DesktopAutoUpdateConfig {
   readonly publicUrl: string
 }
 
+/** GitHub release one Desktop version publishes to, without a selected architecture. */
+export interface DesktopReleaseDestination {
+  readonly environment: DesktopAutoUpdateEnvironment
+  readonly owner: string
+  readonly repo: string
+  readonly tag: string
+  readonly releaseType: 'release' | 'prerelease'
+  readonly publicUrl: string
+}
+
 /**
  * Resolve the update deployment, defaulting local release work to test.
  * @param env - Packaging or upload environment.
@@ -76,6 +86,17 @@ export function desktopReleaseTag(version: string): string
  * @returns Non-empty GitHub token.
  */
 export function resolveDesktopUploadToken(env: NodeJS.ProcessEnv): string
+
+/**
+ * Resolve the GitHub release one version publishes to, without selecting an architecture.
+ * @param env - Release environment.
+ * @param version - Desktop semantic version being released.
+ * @returns Resolved release destination.
+ */
+export function resolveDesktopReleaseDestination(
+  env: NodeJS.ProcessEnv,
+  version: string,
+): DesktopReleaseDestination
 
 /**
  * Resolve the release destination for one target.

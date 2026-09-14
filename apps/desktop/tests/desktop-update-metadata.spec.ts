@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import { load } from 'js-yaml'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  describeChannelArtifact,
   writeAppUpdateConfiguration,
+  writeMergedChannelMetadata,
   writeUpdateMetadata,
 } from '../src/desktop-update-metadata.ts'
 
@@ -83,5 +85,65 @@ describe('the channel metadata', () => {
     await writeFile(join(artifacts, 'empty.zip'), '')
     await expect(writeUpdateMetadata(artifacts, '1.2.3', 'mac-x64', 'latest-mac.yml'))
       .rejects.toThrow(/missing or empty artifact/u)
+  })
+})
+
+describe('the merged channel metadata', () => {
+  interface MergedMetadata {
+    version: string
+    files: { url: string; sha512: string; size: number }[]
+    path: string
+    sha512: string
+    releaseDate: string
+  }
+
+  async function describeZips(artifacts: string, names: readonly string[]): Promise<MergedMetadata> {
+    const described = await Promise.all(names.map(async name => describeChannelArtifact(join(artifacts, name))))
+    const path = writeMergedChannelMetadata(artifacts, '1.2.3-rc.4', 'rc-mac.yml', described)
+    expect(path).toBe(join(artifacts, 'rc-mac.yml'))
+    return load(await readFile(path, 'utf8')) as MergedMetadata
+  }
+
+  it('names the ZIP of every architecture and falls back to the newest entry', async () => {
+    const artifacts = await root()
+    const arm64 = 'deepseek-harness-1.2.3-rc.4-mac-arm64.zip'
+    const x64 = 'deepseek-harness-1.2.3-rc.4-mac-x64.zip'
+    await writeFile(join(artifacts, arm64), 'arm64 signed zip fixture')
+    await writeFile(join(artifacts, x64), 'x64 signed zip fixture')
+    const metadata = await describeZips(artifacts, [arm64, x64])
+    expect(metadata.version).toBe('1.2.3-rc.4')
+    expect(metadata.files.map(file => file.url)).toEqual([arm64, x64])
+    expect(metadata.files.map(file => file.size)).toEqual([
+      (await stat(join(artifacts, arm64))).size,
+      (await stat(join(artifacts, x64))).size,
+    ])
+    const digests = metadata.files.map(file => file.sha512)
+    expect(digests.every(digest => /^[A-Za-z0-9+/]{86}==$/u.test(digest))).toBe(true)
+    expect(new Set(digests).size).toBe(2)
+    expect(metadata.path).toBe(x64)
+    expect(metadata.sha512).toBe(digests[1])
+    expect(Number.isNaN(Date.parse(metadata.releaseDate))).toBe(false)
+  })
+
+  it('describes a release that carries one architecture alone', async () => {
+    const artifacts = await root()
+    const arm64 = 'deepseek-harness-1.2.3-rc.4-mac-arm64.zip'
+    await writeFile(join(artifacts, arm64), 'arm64 signed zip fixture')
+    const metadata = await describeZips(artifacts, [arm64])
+    expect(metadata.files).toHaveLength(1)
+    expect(metadata.files[0]?.url).toBe(arm64)
+    expect(metadata.path).toBe(arm64)
+    expect(metadata.sha512).toBe(metadata.files[0]?.sha512)
+  })
+
+  it('refuses to write a channel file that names no artifact', async () => {
+    const artifacts = await root()
+    expect(() => writeMergedChannelMetadata(artifacts, '1.2.3-rc.4', 'rc-mac.yml', []))
+      .toThrow(/needs at least one artifact/u)
+    const zip = join(artifacts, 'deepseek-harness-1.2.3-rc.4-mac-arm64.zip')
+    await writeFile(zip, 'arm64 signed zip fixture')
+    const described = await describeChannelArtifact(zip)
+    expect(() => writeMergedChannelMetadata(artifacts, '1.2.3-rc.4', 'rc-mac.yml', [described, described]))
+      .toThrow(/names one artifact twice/u)
   })
 })

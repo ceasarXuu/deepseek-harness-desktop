@@ -52,7 +52,6 @@ async function fixture(arch: 'arm64' | 'x64' = 'arm64') {
     await writeFile(join(artifact.output, `${base}.${artifact.format}`), contents)
     if (artifact.format === 'zip') {
       await writeFile(join(artifact.output, `${base}.zip.blockmap`), 'blockmap')
-      await writeFile(join(artifact.output, 'alpha-mac.yml'), 'update metadata')
     }
   }
   return { root, appPath, request, apple, build, base }
@@ -154,7 +153,7 @@ describe('parallel macOS artifacts', () => {
     }
   })
 
-  it.each(['copy', 'signature', 'ticket', 'metadata'] as const)('rejects incomplete %s qualification without promoting artifacts', async (failure) => {
+  it.each(['copy', 'signature', 'ticket'] as const)('rejects incomplete %s qualification without promoting artifacts', async (failure) => {
     const f = await fixture()
     try {
       const apple: MacOSArtifactOperations = {
@@ -165,9 +164,6 @@ describe('parallel macOS artifacts', () => {
       }
       await expect(packageMacOSArtifacts(f.request, async (artifact) => {
         await f.build(artifact)
-        if (failure === 'metadata' && artifact.format === 'zip') {
-          await writeFile(join(artifact.output, 'alpha-mac.yml'), '')
-        }
       }, apple)).rejects.toThrow()
       expect(await readdir(f.root)).toEqual(['artifacts'])
       expect(await readdir(f.request.artifactsRoot)).toEqual(['mac-arm64'])

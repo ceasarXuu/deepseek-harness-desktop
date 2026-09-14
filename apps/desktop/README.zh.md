@@ -108,7 +108,9 @@ pwsh -NoProfile -File apps/desktop/scripts/smoke-windows.ps1 -Electron $Electron
 
 `DSH_DESKTOP_AUTO_UPDATE_ENV` 同时选择打包时写入的发布目标与后续上传目标，可取 `test` 或 `production`；未设置时使用 `test`。生产发布到本 fork 维护的 `ceasarXuu/deepseek-harness-desktop`；测试打包必须通过 `DSH_DESKTOP_UPDATE_REPOSITORY` 提供自己的 `owner/repository` 对。
 
-更新源是 GitHub release。`electron-builder.config.mjs` 的 `publish` 指定 `github` provider，因此 `app-update.yml` 携带仓库信息，由更新器自行解析最新 release。release 的 tag 为 `v<版本>`：provider 按语义版本读取 release tag，并从版本自身的预发布段推导预发布通道，因此 `0.1.5-rc.2` 会在 tag `v0.1.5-rc.2` 下发布 `rc-mac.yml`，而稳定版本发布 `latest-mac.yml`。
+更新源是 GitHub release。`electron-builder.config.mjs` 的 `publish` 指定 `github` provider，而更新器需要的两个文件由打包步骤自己写出：应用资源中的 `app-update.yml`，以及产物目录中该版本的频道元数据。之所以两者都自己写，是因为 electron-builder 只在构建安装器目标的那一趟产出它们，而本应用是从已打包目录构建安装器的——否则发布出来的元数据没有任何应用能找到，已安装应用也完全没有更新器配置。
+
+release 的 tag 为 `v<版本>`：GitHub provider 按语义版本读取 release tag，并从版本自身的预发布段推导预发布通道，因此 `0.1.5-rc.2` 会在 tag `v0.1.5-rc.2` 下发布 `rc-mac.yml`，而稳定版本发布 `latest-mac.yml`。
 
 | 环境 | 发布仓库 | 上传凭据 |
 |---|---|---|

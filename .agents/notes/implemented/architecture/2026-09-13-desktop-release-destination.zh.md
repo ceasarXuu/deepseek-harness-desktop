@@ -14,7 +14,7 @@ Status: implemented
 
 一次 Desktop 发布就是本 fork 维护的仓库 `ceasarXuu/deepseek-harness-desktop` 中的一个 GitHub release，更新源使用 electron-updater 的 GitHub provider。
 
-- `electron-builder.config.mjs` 以 `provider: 'github'` 与仓库坐标发布，因此打包后的 `app-update.yml` 记录该仓库，更新器据此解析最新 release。`releaseType` 跟随版本：预发布版本发布为 GitHub 预发布。
+- `electron-builder.config.mjs` 以 `provider: 'github'` 与仓库坐标发布，而更新器所需的两个文件由打包步骤自己写出：应用资源中的 `app-update.yml`（含仓库与发布类型），以及产物旁的该版本频道元数据。之所以两者都自己写，是因为 electron-builder 只在构建安装器目标的那一趟产出它们，而本应用是从已打包目录构建安装器的；交给 electron-builder 的话，已安装应用会完全没有更新源，发布出的元数据也不指向任何产物。
 - release 的 tag 是 `v<版本>`。provider 按语义版本比较 release tag，并从版本自身的预发布段推导预发布通道，因此 `0.1.5-rc.2` 在 tag `v0.1.5-rc.2` 下发布 `rc-mac.yml`，而 rc 构建的更新器查找的正是该通道文件。稳定版本发布 `latest-mac.yml`，而 GitHub 的 `releases/latest` 永不选择预发布。更新检查读取仓库公开的 releases feed 与 `releases/latest`，不经过 API，因此不消耗 API 配额。
 - [`upload-target.ts`](../../../../apps/desktop/scripts/upload-target.ts)通过 GitHub REST API 以 `GH_TOKEN` 或 `GITHUB_TOKEN` 上传。它先验证本地产物——完成记录、版本、频道元数据、大小、SHA-512——再在 tag 尚无 release 时创建 release、按版本设置预发布标记、替换同名资源，并最后上传频道元数据，使读者不会看到指向尚不存在产物的元数据。
 - [`desktop-release.yml`](../../../../.github/workflows/desktop-release.yml)在托管 runner 上构建两个 macOS 目标，将签名证书导入临时钥匙串，用 App Store Connect 密钥公证，对刚产出的产物验证签名、Gatekeeper 与装订票据，并且只在 `v*` tag 或显式手动运行时发布。它的 tag 守卫会拒绝未指明被打包版本的 tag，因为更新器在该 tag 内解析 `<通道>-mac.yml`。
@@ -34,7 +34,7 @@ Status: implemented
 
 仓库的 releases 即更新源，因此它必须保持公开，且其 tag 必须指明版本：tag 与被打包版本不一致时更新检查会以通道文件错误失败，workflow 的守卫会在任何内容发布前捕获这一点。
 
-两个 macOS 通道运行在托管 runner 上。二者都需要把签名证书与公证密钥作为 `desktop-release` 环境的 secret，且 x64 通道需要 Intel runner 或带 Rosetta 的 Apple Silicon runner，因此 workflow 为它指定 `macos-13`。
+两个 macOS 通道运行在托管 runner 上，都需要把签名证书与公证密钥作为 `desktop-release` 环境的 secret。两个通道都使用 Apple Silicon 镜像：x64 通道在其中通过 Rosetta 运行自己的 x64 工具链，因为 Intel macOS runner 标签正在退役。
 
 Windows 目前无法从 CI 发布：上游的签名路径需要连接在自托管 runner 上的 SafeNet 令牌，因此 Windows 通道只构建未签名安装包作为 workflow 产物，不触碰任何 release。Windows 发布在该 runner 出现前一直受阻。
 

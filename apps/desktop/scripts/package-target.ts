@@ -7,8 +7,10 @@ import { join, resolve } from 'node:path'
 import {
   desktopBuildRecordFilename,
   resolveDesktopAutoUpdateConfig,
+  type DesktopAutoUpdateConfig,
 } from './desktop-auto-update-environment.mjs'
 import { desktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { writeUpdateMetadata } from '../src/desktop-update-metadata.ts'
 import { packageMacOSArtifacts, type DesktopPrepackagedArtifact } from './package-macos.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
@@ -114,21 +116,16 @@ function packageVersion(path: string, label: string): string {
 
 function writeReleaseRecord(
   target: DesktopPackageTarget,
-  environment: NodeJS.ProcessEnv,
   artifactsRoot: string,
+  version: string,
+  update: DesktopAutoUpdateConfig,
 ): void {
-  const desktopVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
-  const dshVersion = packageVersion(join(REPOSITORY_ROOT, 'package.json'), 'dsh package')
-  if (desktopVersion !== dshVersion) {
-    throw new Error(`desktop package: desktop version ${desktopVersion} does not match dsh version ${dshVersion}`)
-  }
-  const update = resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch, dshVersion)
   const recordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   const temporaryPath = `${recordPath}.tmp`
   writeFileSync(temporaryPath, `${JSON.stringify({
     schemaVersion: 1,
     target: target.name,
-    version: dshVersion,
+    version,
     environment: update.environment,
     tag: update.tag,
     releaseType: update.releaseType,
@@ -325,7 +322,16 @@ async function main(): Promise<void> {
   } else {
     await runPnpm(desktopElectronBuilderArguments(target, invocation.directory), electronBuilderEnv)
   }
-  if (!invocation.directory && !invocation.unsigned) writeReleaseRecord(target, electronBuilderEnv, buildPaths.artifacts)
+  if (!invocation.directory && !invocation.unsigned) {
+    const desktopVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
+    const dshVersion = packageVersion(join(REPOSITORY_ROOT, 'package.json'), 'dsh package')
+    if (desktopVersion !== dshVersion) {
+      throw new Error(`desktop package: desktop version ${desktopVersion} does not match dsh version ${dshVersion}`)
+    }
+    const update = resolveDesktopAutoUpdateConfig(electronBuilderEnv, target.platform, target.arch, desktopVersion)
+    await writeUpdateMetadata(buildPaths.artifacts, desktopVersion, target.name, update.metadataFilename)
+    writeReleaseRecord(target, buildPaths.artifacts, desktopVersion, update)
+  }
 }
 
 if (process.argv[1] !== undefined && import.meta.filename === resolve(process.argv[1])) await main()

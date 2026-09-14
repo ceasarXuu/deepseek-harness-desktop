@@ -108,7 +108,9 @@ pwsh -NoProfile -File apps/desktop/scripts/smoke-windows.ps1 -Electron $Electron
 
 `DSH_DESKTOP_AUTO_UPDATE_ENV` selects `test` or `production` for both the release destination embedded during packaging and the later upload; an absent value selects `test`. Production publishes to `ceasarXuu/deepseek-harness-desktop`, the repository this fork maintains, while test packaging requires its own `owner/repository` pair in `DSH_DESKTOP_UPDATE_REPOSITORY`.
 
-The update feed is a GitHub release. `publish` in `electron-builder.config.mjs` names the `github` provider, so `app-update.yml` carries the repository and the updater resolves the newest release from it. A release is tagged `v<version>`: the provider reads release tags as semantic versions and derives the prerelease channel from the version's own prerelease component, so `0.1.5-rc.2` publishes `rc-mac.yml` under tag `v0.1.5-rc.2` while a stable version publishes `latest-mac.yml`.
+The update feed is a GitHub release. `publish` in `electron-builder.config.mjs` names the `github` provider, and packaging writes the two files the updater needs itself: `app-update.yml` into the application's resources, and the version's channel metadata into the artifact directory. It writes both because electron-builder emits them only in a pass that builds an installer target, while this application builds its installers from an already packaged directory — without them a release would publish metadata no application finds, and an installed application would carry no updater configuration at all.
+
+A release is tagged `v<version>`: the GitHub provider reads release tags as semantic versions and derives the prerelease channel from the version's own prerelease component, so `0.1.5-rc.2` publishes `rc-mac.yml` under tag `v0.1.5-rc.2` while a stable version publishes `latest-mac.yml`.
 
 | Environment | Release repository | Upload credential |
 |---|---|---|

@@ -103,6 +103,11 @@ export function createElectronBuilderConfig(
     afterPack: async context => {
       const { verifyRuntimeArchive } = await import('./lib/types/runtime-closure.js')
       await verifyRuntimeArchive(join(context.packager.getResourcesDir(context.appOutDir), DESKTOP_RUNTIME_ARCHIVE))
+      if (update === undefined) return
+      // The installer lanes package this directory rather than building an installer themselves,
+      // so the updater configuration is written wherever the application is packaged.
+      const { writeAppUpdateConfiguration } = await import('./lib/types/desktop-update-metadata.js')
+      writeAppUpdateConfiguration(context.packager.getResourcesDir(context.appOutDir), update)
     },
     afterSign: async context => {
       if (context.electronPlatformName !== 'darwin') return

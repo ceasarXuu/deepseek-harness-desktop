@@ -87,11 +87,13 @@ jobs:
         include:
           - target: mac-arm64
             runner: macos-latest
+            package: package:mac:arm64
             upload: upload:mac:arm64
           # The x64 build runs its own x64 toolchain under Rosetta on the same Apple Silicon
           # image, because the Intel macOS runner labels are being retired.
           - target: mac-x64
             runner: macos-latest
+            package: package:mac:x64
             upload: upload:mac:x64
     steps:
       - uses: actions/checkout@v6
@@ -142,7 +144,7 @@ jobs:
           set -euo pipefail
           printf '%s' "${{ secrets.APPLE_API_KEY }}" > "$RUNNER_TEMP/AuthKey.p8"
           export APPLE_API_KEY="$RUNNER_TEMP/AuthKey.p8"
-          pnpm --filter @deepseek-ai/dsh-desktop run package:${{ matrix.target }}
+          pnpm --filter @deepseek-ai/dsh-desktop run ${{ matrix.package }}
 
       # The artifact is qualified on the machine that produced it: signature, Gatekeeper, and the
       # notarization ticket are all checked before the DMG can be published.

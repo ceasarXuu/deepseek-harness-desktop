@@ -88,8 +88,10 @@ jobs:
           - target: mac-arm64
             runner: macos-latest
             upload: upload:mac:arm64
+          # The x64 build runs its own x64 toolchain under Rosetta on the same Apple Silicon
+          # image, because the Intel macOS runner labels are being retired.
           - target: mac-x64
-            runner: macos-13
+            runner: macos-latest
             upload: upload:mac:x64
     steps:
       - uses: actions/checkout@v6

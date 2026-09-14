@@ -8,9 +8,7 @@ import { desktopUpdateMetadataFilename } from '../scripts/desktop-auto-update-en
 import type { DesktopPackageTargetName } from '../scripts/package-target.ts'
 
 const temporaryDirectories: string[] = []
-const TEST_ORIGIN = 'https://desktop-updates.example.com'
-const TEST_BUCKET = 'test-download-bucket'
-const PRODUCTION_BUCKET = 'production-download-bucket'
+const TEST_REPOSITORY = 'example/desktop-releases'
 
 interface Fixture {
   readonly repositoryRoot: string
@@ -39,15 +37,15 @@ async function fixture(
 
   const [os, arch] = target.split('-') as ['mac' | 'win', 'arm64' | 'x64']
   const base = `deepseek-harness-${version}-${os}-${arch}`
-  const origin = environment === 'test'
-    ? TEST_ORIGIN
-    : 'https://download.deepseek.com'
+  const repository = environment === 'test' ? TEST_REPOSITORY : 'ceasarXuu/deepseek-harness-desktop'
   await writeFile(join(artifactsRoot, `${target}-release.json`), `${JSON.stringify({
     schemaVersion: 1,
     target,
     version,
     environment,
-    publicUrl: `${origin}/_/harness/desktop/stable/${target}/`,
+    tag: `v${version}`,
+    releaseType: version.includes('-') ? 'prerelease' : 'release',
+    publicUrl: `https://github.com/${repository}/releases/download/v${version}/`,
   })}\n`)
 
   if (os === 'mac') {
@@ -80,13 +78,9 @@ async function fixture(
     environment: environment === 'test'
       ? {
         DSH_DESKTOP_AUTO_UPDATE_ENV: 'test',
-        DOWNLOAD_TEST_ORIGIN: TEST_ORIGIN,
-        DOWNLOAD_TEST_COS_BUCKET: TEST_BUCKET,
+        DSH_DESKTOP_UPDATE_REPOSITORY: TEST_REPOSITORY,
       }
-      : {
-        DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
-        DOWNLOAD_PROD_COS_BUCKET: PRODUCTION_BUCKET,
-      },
+      : { DSH_DESKTOP_AUTO_UPDATE_ENV: 'production' },
   }
 }
 
@@ -104,25 +98,29 @@ describe('desktop upload plan', () => {
     expect(plan).toMatchObject({
       environment: 'test',
       version: '1.2.3',
-      publicUrl: 'https://desktop-updates.example.com/_/harness/desktop/stable/mac-arm64/',
-      bucket: TEST_BUCKET,
+      owner: 'example',
+      repo: 'desktop-releases',
+      tag: 'v1.2.3',
+      releaseType: 'release',
+      publicUrl: 'https://github.com/example/desktop-releases/releases/download/v1.2.3/',
     })
-    expect(plan.artifacts.map(artifact => artifact.filename)).toEqual([
+    expect(plan.assets.map(asset => asset.filename)).toEqual([
       'deepseek-harness-1.2.3-mac-arm64.dmg',
       'deepseek-harness-1.2.3-mac-arm64.zip',
       'deepseek-harness-1.2.3-mac-arm64.zip.blockmap',
       'latest-mac.yml',
     ])
-    expect(plan.artifacts.at(-1)).toMatchObject({
+    expect(plan.assets.at(-1)).toMatchObject({
       channelMetadata: true,
-      cacheControl: 'no-cache',
+      contentType: 'application/yaml',
     })
   })
 
   it('uploads the prerelease channel metadata emitted by electron-builder', async () => {
     const paths = await fixture('mac-arm64', '1.2.3-alpha.4')
     const plan = await createDesktopUploadPlan('mac-arm64', paths)
-    expect(plan.artifacts.map(artifact => artifact.filename)).toEqual([
+    expect(plan).toMatchObject({ tag: 'v1.2.3-alpha.4', releaseType: 'prerelease' })
+    expect(plan.assets.map(asset => asset.filename)).toEqual([
       'deepseek-harness-1.2.3-alpha.4-mac-arm64.dmg',
       'deepseek-harness-1.2.3-alpha.4-mac-arm64.zip',
       'deepseek-harness-1.2.3-alpha.4-mac-arm64.zip.blockmap',
@@ -130,16 +128,17 @@ describe('desktop upload plan', () => {
     ])
   })
 
-  it('validates the Windows installer with its embedded blockmap and production destination', async () => {
+  it('validates the Windows installer with its embedded blockmap and production repository', async () => {
     const paths = await fixture('win-x64', '2.0.0', 'production')
     const plan = await createDesktopUploadPlan('win-x64', paths)
-    expect(plan.artifacts.map(artifact => artifact.filename)).toEqual([
+    expect(plan.assets.map(asset => asset.filename)).toEqual([
       'deepseek-harness-2.0.0-win-x64.exe',
       'latest.yml',
     ])
     expect(plan).toMatchObject({
-      publicUrl: 'https://download.deepseek.com/_/harness/desktop/stable/win-x64/',
-      bucket: PRODUCTION_BUCKET,
+      owner: 'ceasarXuu',
+      repo: 'deepseek-harness-desktop',
+      publicUrl: 'https://github.com/ceasarXuu/deepseek-harness-desktop/releases/download/v2.0.0/',
     })
   })
 
@@ -168,8 +167,7 @@ describe('desktop upload plan', () => {
       ...productionPaths,
       environment: {
         DSH_DESKTOP_AUTO_UPDATE_ENV: 'test',
-        DOWNLOAD_TEST_ORIGIN: TEST_ORIGIN,
-        DOWNLOAD_TEST_COS_BUCKET: TEST_BUCKET,
+        DSH_DESKTOP_UPDATE_REPOSITORY: TEST_REPOSITORY,
       },
     })).rejects.toThrow(/completion record.*test/u)
   })

@@ -1,74 +1,77 @@
 import { describe, expect, it } from 'vitest'
 import {
   desktopBuildRecordFilename,
+  desktopReleaseTag,
   desktopUpdateMetadataFilename,
   resolveDesktopAutoUpdateConfig,
   resolveDesktopAutoUpdateEnvironment,
   resolveDesktopAutoUpdateTarget,
-  resolveDesktopUploadConfig,
+  resolveDesktopUploadToken,
 } from '../scripts/desktop-auto-update-environment.mjs'
 
+const TEST_REPOSITORY = 'example/desktop-releases'
+
 describe('desktop auto-update environment', () => {
-  it('defaults packages and uploads to the test deployment', () => {
+  it('defaults packages and uploads to the test deployment repository', () => {
     expect(resolveDesktopAutoUpdateEnvironment({})).toBe('test')
     expect(resolveDesktopAutoUpdateConfig({
-      DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com/',
-    }, 'darwin', 'arm64')).toEqual({
+      DSH_DESKTOP_UPDATE_REPOSITORY: TEST_REPOSITORY,
+    }, 'darwin', 'arm64', '1.2.3')).toEqual({
       environment: 'test',
       target: 'mac-arm64',
-      origin: 'https://desktop-updates.example.com',
-      publicUrl: 'https://desktop-updates.example.com/_/harness/desktop/stable/mac-arm64/',
-      keyPrefix: '_/harness/desktop/stable/mac-arm64',
-    })
-    expect(resolveDesktopUploadConfig({
-      DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com/',
-      DOWNLOAD_TEST_COS_BUCKET: 'test-download-bucket',
-    }, 'darwin', 'arm64')).toMatchObject({
-      bucket: 'test-download-bucket',
-      secretIdEnvName: 'DOWNLOAD_TEST_COS_SECRET_ID',
-      secretKeyEnvName: 'DOWNLOAD_TEST_COS_SECRET_KEY',
+      owner: 'example',
+      repo: 'desktop-releases',
+      tag: 'v1.2.3',
+      releaseType: 'release',
+      metadataFilename: 'latest-mac.yml',
+      publicUrl: 'https://github.com/example/desktop-releases/releases/download/v1.2.3/',
     })
   })
 
-  it('selects the production URL for packages and bucket for uploads', () => {
+  it('publishes production releases to this repository', () => {
     expect(resolveDesktopAutoUpdateConfig({
       DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
-    }, 'win32', 'x64')).toMatchObject({
+    }, 'win32', 'x64', '1.2.3-rc.4')).toEqual({
       environment: 'production',
       target: 'win-x64',
-      publicUrl: 'https://download.deepseek.com/_/harness/desktop/stable/win-x64/',
-    })
-    expect(resolveDesktopUploadConfig({
-      DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
-      DOWNLOAD_PROD_COS_BUCKET: 'production-download-bucket',
-    }, 'win32', 'x64')).toMatchObject({
-      bucket: 'production-download-bucket',
-      secretIdEnvName: 'DOWNLOAD_PROD_COS_SECRET_ID',
-      secretKeyEnvName: 'DOWNLOAD_PROD_COS_SECRET_KEY',
+      owner: 'ceasarXuu',
+      repo: 'deepseek-harness-desktop',
+      tag: 'v1.2.3-rc.4',
+      releaseType: 'prerelease',
+      metadataFilename: 'rc.yml',
+      publicUrl: 'https://github.com/ceasarXuu/deepseek-harness-desktop/releases/download/v1.2.3-rc.4/',
     })
   })
 
-  it('requires the selected deployment origin for packages and bucket only for uploads', () => {
-    expect(() => resolveDesktopAutoUpdateConfig({}, 'darwin', 'arm64'))
-      .toThrow(/DOWNLOAD_TEST_ORIGIN/u)
-    expect(resolveDesktopAutoUpdateConfig({
-      DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com',
-    }, 'darwin', 'arm64').publicUrl).toContain('/mac-arm64/')
-    expect(() => resolveDesktopUploadConfig({
-      DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com',
-    }, 'darwin', 'arm64')).toThrow(/DOWNLOAD_TEST_COS_BUCKET/u)
-    expect(() => resolveDesktopUploadConfig({
-      DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
-    }, 'win32', 'x64')).toThrow(/DOWNLOAD_PROD_COS_BUCKET/u)
+  it('requires the test repository and rejects malformed pairs', () => {
+    expect(() => resolveDesktopAutoUpdateConfig({}, 'darwin', 'arm64', '1.2.3'))
+      .toThrow(/DSH_DESKTOP_UPDATE_REPOSITORY/u)
+    for (const repository of ['example', 'example/', '/desktop', 'example/desktop/extra', 'example/desk top']) {
+      expect(() => resolveDesktopAutoUpdateConfig({
+        DSH_DESKTOP_UPDATE_REPOSITORY: repository,
+      }, 'darwin', 'arm64', '1.2.3')).toThrow(/owner\/repository pair/u)
+    }
   })
 
-  it('rejects a test download URL that is not an HTTPS origin', () => {
+  it('rejects a version that cannot name a release tag', () => {
     expect(() => resolveDesktopAutoUpdateConfig({
-      DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com/releases',
-    }, 'darwin', 'arm64')).toThrow(/HTTPS origin without a path/u)
-    expect(() => resolveDesktopAutoUpdateConfig({
-      DOWNLOAD_TEST_ORIGIN: 'http://desktop-updates.example.com',
-    }, 'darwin', 'arm64')).toThrow(/HTTPS origin/u)
+      DSH_DESKTOP_UPDATE_REPOSITORY: TEST_REPOSITORY,
+    }, 'darwin', 'arm64', 'not-semver')).toThrow(/invalid Desktop version/u)
+    expect(() => desktopReleaseTag('not-semver')).toThrow(/invalid Desktop version/u)
+  })
+
+  it('tags releases with the version the updater compares', () => {
+    expect(desktopReleaseTag('1.2.3')).toBe('v1.2.3')
+    expect(desktopReleaseTag('1.2.3-rc.4')).toBe('v1.2.3-rc.4')
+  })
+
+  it('reads the upload credential from either accepted variable', () => {
+    expect(resolveDesktopUploadToken({ GH_TOKEN: 'workflow-token' })).toBe('workflow-token')
+    expect(resolveDesktopUploadToken({ GITHUB_TOKEN: 'actions-token' })).toBe('actions-token')
+    expect(resolveDesktopUploadToken({ GH_TOKEN: 'workflow-token', GITHUB_TOKEN: 'actions-token' }))
+      .toBe('workflow-token')
+    expect(() => resolveDesktopUploadToken({})).toThrow(/GH_TOKEN or GITHUB_TOKEN/u)
+    expect(() => resolveDesktopUploadToken({ GITHUB_TOKEN: '   ' })).toThrow(/GH_TOKEN or GITHUB_TOKEN/u)
   })
 
   it('rejects unknown deployments and targets', () => {

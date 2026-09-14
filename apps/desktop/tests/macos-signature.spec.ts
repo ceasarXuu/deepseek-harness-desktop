@@ -1,7 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { createRequire } from 'node:module'
+import { prerelease } from 'semver'
 import { FileMatcher } from 'app-builder-lib/out/fileMatcher.js'
 import { runtimeFixture } from './runtime-fixture.ts'
 import {
@@ -40,8 +41,12 @@ const RELEASE_ENVIRONMENT = {
   APPLE_API_KEY: '/private/credentials/AuthKey_TEST123456.p8',
   APPLE_API_KEY_ID: 'TEST123456',
   APPLE_API_ISSUER: '11111111-2222-3333-4444-555555555555',
-  DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com',
+  DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
 }
+
+// The packaged application is whatever version this repository carries, so its release type follows that version.
+const APP_VERSION = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version
+const APP_RELEASE_TYPE = prerelease(APP_VERSION) === null ? 'release' : 'prerelease'
 
 function portablePath(value: string): string {
   return value.replaceAll('\\', '/')
@@ -83,8 +88,10 @@ describe('desktop macOS release signature', () => {
         writeUpdateInfo: false,
       },
       publish: [{
-        provider: 'generic',
-        url: 'https://desktop-updates.example.com/_/harness/desktop/stable/mac-arm64/',
+        provider: 'github',
+        owner: 'example',
+        repo: 'desktop-releases',
+        releaseType: APP_RELEASE_TYPE,
       }],
     })
     expect(typeof config.artifactBuildCompleted).toBe('function')

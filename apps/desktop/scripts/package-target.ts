@@ -21,10 +21,8 @@ const WINDOWS_SIGNING_ENV_NAMES = [
   'DSH_DESKTOP_WINDOWS_TOKEN_PIN',
 ] as const
 const DESKTOP_UPLOAD_CREDENTIAL_ENV_NAMES = new Set([
-  'DOWNLOAD_TEST_COS_SECRET_ID',
-  'DOWNLOAD_TEST_COS_SECRET_KEY',
-  'DOWNLOAD_PROD_COS_SECRET_ID',
-  'DOWNLOAD_PROD_COS_SECRET_KEY',
+  'GH_TOKEN',
+  'GITHUB_TOKEN',
 ])
 
 /** Fixed platform and architecture identifiers exposed by package scripts. */
@@ -93,7 +91,7 @@ export function desktopElectronBuilderEnvironment(environment: NodeJS.ProcessEnv
 }
 
 /**
- * Remove upload-only COS credentials from every packaging subprocess.
+ * Remove upload credentials from every packaging subprocess.
  * @param environment - Packaging command environment.
  * @returns A copy without Desktop upload credentials.
  */
@@ -124,7 +122,7 @@ function writeReleaseRecord(
   if (desktopVersion !== dshVersion) {
     throw new Error(`desktop package: desktop version ${desktopVersion} does not match dsh version ${dshVersion}`)
   }
-  const update = resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
+  const update = resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch, dshVersion)
   const recordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   const temporaryPath = `${recordPath}.tmp`
   writeFileSync(temporaryPath, `${JSON.stringify({
@@ -132,6 +130,8 @@ function writeReleaseRecord(
     target: target.name,
     version: dshVersion,
     environment: update.environment,
+    tag: update.tag,
+    releaseType: update.releaseType,
     publicUrl: update.publicUrl,
   }, null, 2)}\n`)
   renameSync(temporaryPath, recordPath)

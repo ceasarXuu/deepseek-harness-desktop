@@ -8,8 +8,7 @@ import { load } from 'js-yaml'
 import type { DesktopPackageTargetName } from './package-target.ts'
 import {
   desktopBuildRecordFilename,
-  desktopUpdateMetadataFilename,
-  resolveDesktopUploadConfig,
+  resolveDesktopAutoUpdateConfig,
 } from './desktop-auto-update-environment.mjs'
 import { desktopTargetBuildPaths } from './desktop-build-paths.mjs'
 
@@ -25,13 +24,11 @@ const TARGETS = {
   readonly os: string
 }>
 
-/** One local file and its final object metadata. */
-export interface DesktopUploadArtifact {
+/** One local file and the release asset it becomes. */
+export interface DesktopUploadAsset {
   readonly path: string
   readonly filename: string
-  readonly key: string
   readonly contentType: string
-  readonly cacheControl: string
   readonly channelMetadata: boolean
 }
 
@@ -40,11 +37,12 @@ export interface DesktopUploadPlan {
   readonly environment: 'test' | 'production'
   readonly target: DesktopPackageTargetName
   readonly version: string
+  readonly owner: string
+  readonly repo: string
+  readonly tag: string
+  readonly releaseType: 'release' | 'prerelease'
   readonly publicUrl: string
-  readonly bucket: string
-  readonly secretIdEnvName: string
-  readonly secretKeyEnvName: string
-  readonly artifacts: readonly DesktopUploadArtifact[]
+  readonly assets: readonly DesktopUploadAsset[]
 }
 
 /** Filesystem and environment inputs used to validate one upload. */
@@ -144,30 +142,15 @@ async function requireArtifact(artifactsRoot: string, filename: string): Promise
   return path
 }
 
-function uploadArtifact(
-  path: string,
-  keyPrefix: string,
-  contentType: string,
-  channelMetadata = false,
-): DesktopUploadArtifact {
-  const filename = basename(path)
-  return {
-    path,
-    filename,
-    key: `${keyPrefix}/${filename}`,
-    contentType,
-    cacheControl: channelMetadata
-      ? 'no-cache'
-      : 'public, max-age=31536000, immutable',
-    channelMetadata,
-  }
+function uploadAsset(path: string, contentType: string, channelMetadata = false): DesktopUploadAsset {
+  return { path, filename: basename(path), contentType, channelMetadata }
 }
 
 /**
  * Validate the completed package record, dsh version, update metadata, hashes, and target files.
  * @param targetName - Fixed platform and architecture selected by the upload command.
  * @param options - Optional filesystem roots and environment for tests or release automation.
- * @returns An upload plan whose mutable channel metadata is the final entry.
+ * @returns An upload plan whose mutable channel metadata is the final asset.
  */
 export async function createDesktopUploadPlan(
   targetName: DesktopPackageTargetName,
@@ -187,7 +170,7 @@ export async function createDesktopUploadPlan(
     throw new Error(`desktop upload: desktop version ${desktopVersion} does not match current dsh version ${dshVersion}`)
   }
 
-  const update = resolveDesktopUploadConfig(environment, target.platform, target.arch)
+  const update = resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch, dshVersion)
   const buildRecord = await jsonFile(
     join(artifactsRoot, desktopBuildRecordFilename(targetName)),
     `${targetName} package completion record`,
@@ -196,12 +179,13 @@ export async function createDesktopUploadPlan(
     || buildRecord.target !== targetName
     || buildRecord.version !== dshVersion
     || buildRecord.environment !== update.environment
+    || buildRecord.tag !== update.tag
+    || buildRecord.releaseType !== update.releaseType
     || buildRecord.publicUrl !== update.publicUrl) {
-    throw new Error(`desktop upload: ${targetName} package completion record does not match dsh ${dshVersion} and ${update.environment} update destination`)
+    throw new Error(`desktop upload: ${targetName} package completion record does not match dsh ${dshVersion} and ${update.environment} release ${update.tag}`)
   }
 
-  const metadataFilename = desktopUpdateMetadataFilename(dshVersion, target.platform)
-  const metadataPath = join(artifactsRoot, metadataFilename)
+  const metadataPath = join(artifactsRoot, update.metadataFilename)
   let metadataValue: unknown
   try {
     metadataValue = load(await readFile(metadataPath, 'utf8'))
@@ -209,49 +193,49 @@ export async function createDesktopUploadPlan(
   catch (error) {
     throw new Error(`desktop upload: cannot read update metadata at ${metadataPath}: ${error instanceof Error ? error.message : String(error)}`)
   }
-  const metadata = object(metadataValue, metadataFilename)
-  const metadataVersion = stringField(metadata.version, `${metadataFilename}.version`)
+  const metadata = object(metadataValue, update.metadataFilename)
+  const metadataVersion = stringField(metadata.version, `${update.metadataFilename}.version`)
   if (metadataVersion !== dshVersion) {
-    throw new Error(`desktop upload: ${metadataFilename} version ${metadataVersion} does not match current dsh version ${dshVersion}`)
+    throw new Error(`desktop upload: ${update.metadataFilename} version ${metadataVersion} does not match current dsh version ${dshVersion}`)
   }
   if (!Array.isArray(metadata.files) || metadata.files.length !== 1) {
-    throw new Error(`desktop upload: ${metadataFilename}.files must contain exactly one target update file`)
+    throw new Error(`desktop upload: ${update.metadataFilename}.files must contain exactly one target update file`)
   }
 
   const base = `deepseek-harness-${dshVersion}-${target.os}-${target.arch}`
   const updaterExtension = target.platform === 'darwin' ? 'zip' : 'exe'
-  const updaterInfo = updateFileInfo(metadata.files[0], `${metadataFilename}.files[0]`, `${base}.${updaterExtension}`)
+  const updaterInfo = updateFileInfo(metadata.files[0], `${update.metadataFilename}.files[0]`, `${base}.${updaterExtension}`)
   const updaterPath = await verifyChecksummedArtifact(artifactsRoot, updaterInfo)
-  const artifacts: DesktopUploadArtifact[] = []
+  const assets: DesktopUploadAsset[] = []
 
   if (target.platform === 'darwin') {
     const dmgPath = await requireArtifact(artifactsRoot, `${base}.dmg`)
     const blockmapPath = await requireArtifact(artifactsRoot, `${base}.zip.blockmap`)
-    artifacts.push(
-      uploadArtifact(dmgPath, update.keyPrefix, 'application/x-apple-diskimage'),
-      uploadArtifact(updaterPath, update.keyPrefix, 'application/zip'),
-      uploadArtifact(blockmapPath, update.keyPrefix, 'application/octet-stream'),
+    assets.push(
+      uploadAsset(dmgPath, 'application/x-apple-diskimage'),
+      uploadAsset(updaterPath, 'application/zip'),
+      uploadAsset(blockmapPath, 'application/octet-stream'),
     )
   }
   else {
-    const blockMapSize = object(metadata.files[0], `${metadataFilename}.files[0]`).blockMapSize
-    numberField(blockMapSize, `${metadataFilename}.files[0].blockMapSize`)
-    artifacts.push(uploadArtifact(
+    const blockMapSize = object(metadata.files[0], `${update.metadataFilename}.files[0]`).blockMapSize
+    numberField(blockMapSize, `${update.metadataFilename}.files[0].blockMapSize`)
+    assets.push(uploadAsset(
       updaterPath,
-      update.keyPrefix,
       'application/vnd.microsoft.portable-executable',
     ))
   }
 
-  artifacts.push(uploadArtifact(metadataPath, update.keyPrefix, 'application/yaml', true))
+  assets.push(uploadAsset(metadataPath, 'application/yaml', true))
   return {
     environment: update.environment,
     target: targetName,
     version: dshVersion,
+    owner: update.owner,
+    repo: update.repo,
+    tag: update.tag,
+    releaseType: update.releaseType,
     publicUrl: update.publicUrl,
-    bucket: update.bucket,
-    secretIdEnvName: update.secretIdEnvName,
-    secretKeyEnvName: update.secretKeyEnvName,
-    artifacts,
+    assets,
   }
 }

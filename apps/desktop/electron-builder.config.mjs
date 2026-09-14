@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -18,6 +19,15 @@ import {
   desktopTargetBuildPaths,
   resolveDesktopBuildTarget,
 } from './scripts/desktop-build-paths.mjs'
+
+/** Read the version of the application being packaged, which names its release tag. */
+function desktopVersion() {
+  const manifest = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+  if (typeof manifest.version !== 'string' || manifest.version === '') {
+    throw new Error('desktop package: the application manifest has no version')
+  }
+  return manifest.version
+}
 
 /**
  * Create electron-builder configuration from one release environment.
@@ -55,7 +65,7 @@ export function createElectronBuilderConfig(
   if (windowsSigner !== undefined) {
     installWindowsNsisBootstrapSigner({ sign: windowsSigner })
   }
-  const update = unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
+  const update = unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch, desktopVersion())
   const buildPaths = desktopTargetBuildPaths(resolveDesktopBuildTarget(env, hostPlatform, hostArch))
   return {
     appId,
@@ -126,7 +136,12 @@ export function createElectronBuilderConfig(
       allowToChangeInstallationDirectory: true,
       differentialPackage: true,
     },
-    publish: update === undefined ? null : [{ provider: 'generic', url: update.publicUrl }],
+    publish: update === undefined ? null : [{
+      provider: 'github',
+      owner: update.owner,
+      repo: update.repo,
+      releaseType: update.releaseType,
+    }],
   }
 }
 

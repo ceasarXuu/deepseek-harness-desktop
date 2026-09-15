@@ -30,6 +30,8 @@ const harness = await vi.hoisted(async () => {
   }
   const windows: FakeWindow[] = []
   const hosts: FakeHost[] = []
+  /** The last menu template handed to Electron's buildFromTemplate. */
+  const menu = { template: undefined as unknown }
   const handlers = new Map<string, (event: { senderFrame: { url: string } }) => unknown>()
   let pluginsEnabled = false
   let preparing = deferred()
@@ -94,7 +96,7 @@ const harness = await vi.hoisted(async () => {
     }),
   })
   return {
-    windows, hosts, handlers, app, FakeWindow, FakeHost,
+    windows, hosts, menu, handlers, app, FakeWindow, FakeHost,
     dialog: { showErrorBox: vi.fn(), showMessageBox },
     applyRelease: vi.fn(() => { preparing.resolve(); return prepared.promise }),
     assertProfileRuntime: vi.fn(),
@@ -115,6 +117,7 @@ const harness = await vi.hoisted(async () => {
     reset() {
       windows.length = 0; hosts.length = 0; handlers.clear(); app.removeAllListeners()
       app.isPackaged = true
+      menu.template = undefined
       pluginsEnabled = false
       showMessageBox.mockReset()
       showMessageBox.mockImplementation(async (_options: DialogOptions) => ({ response: 1, checkboxChecked: false }))
@@ -134,7 +137,10 @@ vi.mock('electron', () => ({
   ipcMain: {
     handle: (channel: string, handler: (event: { senderFrame: { url: string } }) => unknown) => { harness.handlers.set(channel, handler) },
   },
-  Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn() },
+  Menu: {
+    setApplicationMenu: vi.fn(),
+    buildFromTemplate: vi.fn((template: unknown) => { harness.menu.template = template; return template }),
+  },
   protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },
 }))
 vi.mock('../src/paths.ts', () => ({
@@ -352,6 +358,20 @@ describe('desktop main startup', () => {
     expect(harness.windows).toHaveLength(1)
     expect(window.urls).toEqual(['dsh-app://shell/startup.html', 'dsh-app://app/index.html'])
     expect(invoke(DESKTOP_IPC.backendStatus)).toEqual({ phase: 'ready' })
+  })
+
+  it('keeps the fork items in the application submenu and adds the editing role menus', async () => {
+    await import('../src/main.ts')
+    const template = harness.menu.template as Array<{
+      label?: string
+      role?: string
+      type?: string
+      submenu?: Array<{ label?: string; role?: string; type?: string }>
+    }>
+    expect(template[0]!.submenu!.map(item => item.label ?? item.role ?? item.type)).toEqual([
+      'Desktop Plugins…', 'Check for Updates…', 'separator', 'quit',
+    ])
+    expect(template.slice(1).map(item => item.role)).toEqual(['editMenu', 'windowMenu'])
   })
 
   it('expands the shipped archive into the closure and reports its progress to the loading window', async () => {

@@ -46,19 +46,26 @@ export function resolveDesktopAppId(env) {
 }
 
 /**
- * Resolve and validate the public identity expected on a macOS release.
+ * Read the signing certificate's exact common name from a configured identity.
  *
  * The configured value is either the certificate qualifier or its full common name. A keychain that
  * holds another certificate whose common name contains the qualifier makes the qualifier ambiguous
- * to `codesign`, so the full common name is accepted and passed through to the signing commands.
+ * to `codesign`, so the full common name is accepted and every signing command names that.
+ * @param {string} value - Configured certificate qualifier or common name.
+ * @returns {string} Common name to sign with.
+ */
+export function macOSCertificateName(value) {
+  return value.startsWith('Developer ID Application: ') ? value : `Developer ID Application: ${value}`
+}
+
+/**
+ * Resolve and validate the public identity expected on a macOS release.
  * @param {NodeJS.ProcessEnv} env - Packaging environment.
  * @returns {{ signingIdentity: string, certificateName: string, teamId: string }} Certificate qualifier, exact signing name, and Team ID.
  */
 export function resolveMacOSSigningEnvironment(env) {
-  const certificateName = requireEnvironmentValue(env, MACOS_SIGNING_IDENTITY_ENV)
-  const signingIdentity = certificateName.startsWith('Developer ID Application: ')
-    ? certificateName.slice('Developer ID Application: '.length)
-    : certificateName
+  const certificateName = macOSCertificateName(requireEnvironmentValue(env, MACOS_SIGNING_IDENTITY_ENV))
+  const signingIdentity = certificateName.slice('Developer ID Application: '.length)
   const teamId = requireEnvironmentValue(env, MACOS_TEAM_ID_ENV)
   if (!/^[A-Z0-9]{10}$/u.test(teamId)) {
     throw new Error(`desktop release environment: ${MACOS_TEAM_ID_ENV} must contain 10 uppercase letters or digits`)

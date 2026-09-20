@@ -36,6 +36,18 @@ describe('temporary macOS signing identity', () => {
     expect(action).toHaveBeenCalledTimes(stage === 'build' ? 1 : 0)
   })
 
+  it.each(['Example (TEAMID1234)', 'Developer ID Application: Example (TEAMID1234)'])('probes with the exact certificate common name %s', async (identity) => {
+    const run = vi.fn<(command: string, args: string[]) => void>()
+    await withMacOSSigningKeychain({ ...environment, DSH_DESKTOP_MACOS_SIGNING_IDENTITY: identity }, async () => {}, run)
+    const probe = run.mock.calls.find(([command, args]) => command === '/usr/bin/codesign' && args[0] === '--force')![1]
+    expect(probe[probe.indexOf('--sign') + 1]).toBe('Developer ID Application: Example (TEAMID1234)')
+  })
+
+  it('refuses to probe without a configured signing identity', async () => {
+    await expect(withMacOSSigningKeychain({ CSC_LINK: '/signing.p12', CSC_KEY_PASSWORD: 'export-secret' }, async () => {}, () => {}))
+      .rejects.toThrow(/DSH_DESKTOP_MACOS_SIGNING_IDENTITY/u)
+  })
+
   it('allocates distinct keychains for overlapping invocations', async () => {
     const paths: string[] = []
     let release!: () => void

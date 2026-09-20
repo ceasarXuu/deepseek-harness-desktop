@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { macOSCertificateName } from './desktop-release-environment.mjs'
 
 /**
  * Execute a credential-bearing Apple command without exposing arguments or tool output on failure.
@@ -32,6 +33,8 @@ export async function withMacOSSigningKeychain(environment, action, run = execut
   const certificate = environment.CSC_LINK
   const exportPassword = environment.CSC_KEY_PASSWORD
   if (!certificate || exportPassword === undefined) throw new Error('desktop macOS signing: CSC_LINK and CSC_KEY_PASSWORD are required')
+  const configuredIdentity = environment.DSH_DESKTOP_MACOS_SIGNING_IDENTITY
+  if (configuredIdentity === undefined || configuredIdentity === '') throw new Error('desktop macOS signing: DSH_DESKTOP_MACOS_SIGNING_IDENTITY is required')
   const directory = mkdtempSync(join(tmpdir(), 'dsh-macos-signing-'))
   const keychain = join(directory, 'signing.keychain-db')
   const password = randomBytes(32).toString('base64')
@@ -44,10 +47,10 @@ export async function withMacOSSigningKeychain(environment, action, run = execut
     security(['unlock-keychain', '-p', password, keychain])
     security(['set-keychain-settings', keychain])
     security(['import', certificate, '-k', keychain, '-P', exportPassword, '-T', '/usr/bin/codesign', '-T', '/usr/bin/productbuild'])
-    security(['set-key-partition-list', '-S', 'apple-tool:,apple:', '-s', '-k', password, keychain])
+    security(['set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password, keychain])
     const probe = join(directory, 'probe')
     run('/bin/cp', ['/usr/bin/true', probe])
-    run('/usr/bin/codesign', ['--force', '--sign', `Developer ID Application: ${environment.DSH_DESKTOP_MACOS_SIGNING_IDENTITY}`, '--keychain', keychain, '--timestamp', '--options', 'runtime', probe])
+    run('/usr/bin/codesign', ['--force', '--sign', macOSCertificateName(configuredIdentity), '--keychain', keychain, '--timestamp', '--options', 'runtime', probe])
     run('/usr/bin/codesign', ['--verify', '--strict', probe])
     const childEnvironment = { ...environment, CSC_KEYCHAIN: keychain }
     delete childEnvironment.CSC_LINK

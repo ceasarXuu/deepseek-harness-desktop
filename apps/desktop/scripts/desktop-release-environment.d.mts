@@ -48,6 +48,13 @@ export type MacOSNotarizationEnvironment =
 export function resolveDesktopAppId(env: NodeJS.ProcessEnv): string
 
 /**
+ * Read the signing certificate's exact common name from a configured identity.
+ * @param value - Configured certificate qualifier or common name.
+ * @returns Common name to sign with.
+ */
+export function macOSCertificateName(value: string): string
+
+/**
  * Resolve and validate the public identity expected on a macOS release.
  * @param env - Packaging environment.
  * @returns Expected certificate qualifier and Team ID.

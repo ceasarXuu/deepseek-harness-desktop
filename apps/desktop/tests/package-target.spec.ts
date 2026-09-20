@@ -38,6 +38,8 @@ describe('desktop package target', () => {
     expect(parseDesktopPackageInvocation(['mac-arm64', '--dir'], 'darwin', 'arm64').directory).toBe(true)
     expect(parseDesktopPackageInvocation([], 'darwin', 'arm64').target.name).toBe('mac-arm64')
     expect(parseDesktopPackageInvocation(['--prepare-only'], 'darwin', 'arm64').prepareOnly).toBe(true)
+    expect(parseDesktopPackageInvocation(['--check'], 'darwin', 'arm64').check).toBe(true)
+    expect(parseDesktopPackageInvocation(['win-x64', '--check', '--unsigned'], 'win32', 'x64')).toMatchObject({ check: true, unsigned: true })
     expect(() => parseDesktopPackageInvocation(['mac-arm64', 'mac-x64'], 'darwin', 'arm64'))
       .toThrow(/at most one target/u)
   })
@@ -106,15 +108,21 @@ describe('desktop package target', () => {
     })).toEqual({ DSH_DESKTOP_AUTO_UPDATE_ENV: 'production' })
   })
 
-  it('keeps upload credentials out of every packaging subprocess', () => {
+  it('keeps COS credentials out of every packaging subprocess', () => {
     expect(withoutDesktopUploadCredentials({
+      DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com',
+      DOWNLOAD_TEST_COS_BUCKET: 'test-download-bucket',
+      DOWNLOAD_TEST_COS_SECRET_ID: 'test-id',
+      DOWNLOAD_TEST_COS_SECRET_KEY: 'test-key',
+      DOWNLOAD_PROD_COS_BUCKET: 'production-download-bucket',
+      DOWNLOAD_PROD_COS_SECRET_ID: 'production-id',
+      DOWNLOAD_PROD_COS_SECRET_KEY: 'production-key',
       DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
-      DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
-      GH_TOKEN: 'workflow-token',
-      GITHUB_TOKEN: 'actions-token',
     })).toEqual({
+      DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com',
+      DOWNLOAD_TEST_COS_BUCKET: 'test-download-bucket',
+      DOWNLOAD_PROD_COS_BUCKET: 'production-download-bucket',
       DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
-      DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
     })
   })
 })

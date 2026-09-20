@@ -1,19 +1,3 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
-import { createRequire } from 'node:module'
-import { prerelease } from 'semver'
-import { FileMatcher } from 'app-builder-lib/out/fileMatcher.js'
-import { runtimeFixture } from './runtime-fixture.ts'
-import {
-  DESKTOP_RUNTIME_ARCHIVE,
-  DESKTOP_RUNTIME_ARCHIVE_DIGEST,
-  ensureDesktopRuntime,
-  fileDigest,
-  packRuntimeArchive,
-  verifyRuntimeArchive,
-} from '../src/runtime-closure.ts'
-import { DESKTOP_RUNTIME_ARCHIVE as DESKTOP_RUNTIME_ARCHIVE_NAME } from '../scripts/desktop-build-paths.mjs'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { NotarizeOptions } from '@electron/notarize'
 import {
@@ -27,13 +11,9 @@ import {
   assertMacOSSignatureDetails,
 } from '../scripts/verify-macos-signature.mjs'
 
-// app-builder-lib omits this internal copier from its declarations; the regression exercises its actual file filter.
-const { copyFiles } = createRequire(import.meta.url)('app-builder-lib/out/fileMatcher.js') as {
-  copyFiles: (matchers: FileMatcher[]) => Promise<void>
-}
-
 const RELEASE_ENVIRONMENT = {
   DSH_DESKTOP_APP_ID: 'com.example.desktop',
+  DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
   DSH_DESKTOP_TARGET_PLATFORM: 'darwin',
   DSH_DESKTOP_TARGET_ARCH: 'arm64',
   DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)',
@@ -41,12 +21,8 @@ const RELEASE_ENVIRONMENT = {
   APPLE_API_KEY: '/private/credentials/AuthKey_TEST123456.p8',
   APPLE_API_KEY_ID: 'TEST123456',
   APPLE_API_ISSUER: '11111111-2222-3333-4444-555555555555',
-  DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
+  DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com',
 }
-
-// The packaged application is whatever version this repository carries, so its release type follows that version.
-const APP_VERSION = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version
-const APP_RELEASE_TYPE = prerelease(APP_VERSION) === null ? 'release' : 'prerelease'
 
 function portablePath(value: string): string {
   return value.replaceAll('\\', '/')
@@ -65,33 +41,37 @@ describe('desktop macOS release signature', () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     const config = createElectronBuilderConfig(RELEASE_ENVIRONMENT, 'darwin', 'arm64')
     expect(portablePath(config.directories.output)).toContain('/.desktop-build/targets/mac-arm64/artifacts')
-    expect(config.extraResources).toHaveLength(3)
+    expect(config.extraResources).toHaveLength(2)
     expect(config.extraResources[0]?.to).toBe('runtime')
-    // The packaged application reads these two names from `process.resourcesPath`.
-    expect(config.extraResources.map(entry => entry.to)).toEqual([
-      'runtime', DESKTOP_RUNTIME_ARCHIVE, DESKTOP_RUNTIME_ARCHIVE_DIGEST,
-    ])
-    expect(DESKTOP_RUNTIME_ARCHIVE).toBe(DESKTOP_RUNTIME_ARCHIVE_NAME)
     expect(portablePath(config.extraResources[0]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/runtime')
-    expect(portablePath(config.extraResources[1]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/desktop-runtime.tar.zst')
-    expect(portablePath(config.extraResources[2]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/desktop-runtime.tar.zst.sha256')
+    const [dshFiles, dshNodeModules] = config.files.slice(-2)
+    if (!dshFiles || !dshNodeModules || typeof dshFiles === 'string' || typeof dshNodeModules === 'string') {
+      throw new Error('desktop DSH resources must use electron-builder file mappings')
+    }
+    expect(portablePath(dshFiles.from)).toContain('/.desktop-build/targets/mac-arm64/dsh')
+    expect(dshFiles.to).toBe('dsh')
+    expect(portablePath(dshNodeModules.from)).toContain('/.desktop-build/targets/mac-arm64/dsh/node_modules')
+    expect(dshNodeModules.to).toBe('dsh/node_modules')
+    expect(config.asarUnpack).toEqual(expect.arrayContaining([
+      '**/*.{node,dylib,dll,so,exe}',
+      '**/@vscode/ripgrep/bin/rg',
+    ]))
     expect(config).toMatchObject({
       appId: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
       mac: {
         identity: RELEASE_ENVIRONMENT.DSH_DESKTOP_MACOS_SIGNING_IDENTITY,
         forceCodeSigning: true,
         notarize: true,
-        signIgnore: ['\\.pak$'],
+        signIgnore: ['/Contents/Resources/app\\.asar\\.unpacked/dsh(?:/|$)', '/Contents/Resources/runtime/primary-runtime(?:/|$)', '\\.pak$'],
       },
       dmg: {
         sign: true,
         writeUpdateInfo: false,
       },
       publish: [{
-        provider: 'github',
-        owner: 'example',
-        repo: 'desktop-releases',
-        releaseType: APP_RELEASE_TYPE,
+        provider: 'generic',
+        url: 'https://desktop-updates.example.com/dsh-desk/feeds/mac-arm64/',
+        channel: 'nightly',
       }],
     })
     expect(typeof config.artifactBuildCompleted).toBe('function')
@@ -104,8 +84,6 @@ describe('desktop macOS release signature', () => {
     expect(ignored('/App.app/Contents/Frameworks/Electron.framework/Versions/A/Resources/en.lproj/locale.pak')).toBe(true)
     expect(ignored('/App.app/Contents/Frameworks/Electron.framework/Versions/A/Resources/resources.pak')).toBe(true)
     for (const path of [
-      `/App.app/Contents/Resources/${DESKTOP_RUNTIME_ARCHIVE}`,
-      `/App.app/Contents/Resources/${DESKTOP_RUNTIME_ARCHIVE_DIGEST}`,
       '/App.app/Contents/Resources/runtime/node/node',
       '/App.app/Contents/Resources/runtime/pnpm/addon.node',
       '/App.app/Contents/Frameworks/Electron.framework/Versions/A/library.dylib',
@@ -114,34 +92,11 @@ describe('desktop macOS release signature', () => {
     ]) expect(ignored(path)).toBe(false)
   })
 
-  it('carries the archive and the digest beside it into the application resources', async () => {
-    const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
-    const config = createElectronBuilderConfig(RELEASE_ENVIRONMENT, 'darwin', 'arm64')
-    const root = mkdtempSync(join(tmpdir(), 'desktop-resource-copy-'))
-    try {
-      const source = join(root, 'source')
-      const destination = join(root, 'resources')
-      const tree = join(source, 'dsh')
-      mkdirSync(tree, { recursive: true })
-      runtimeFixture(tree)
-      await packRuntimeArchive(tree, join(source, DESKTOP_RUNTIME_ARCHIVE))
-      // electron-builder copies each extraResource with this copier. The application then reads
-      // the archive beside its digest, which is what makes the recorded digest a reference.
-      const matchers = config.extraResources.filter(entry => entry.to !== 'runtime').map(entry => new FileMatcher(
-        join(source, basename(entry.from)), join(destination, entry.to), value => value,
-      ))
-      await copyFiles(matchers)
-      const copied = join(destination, DESKTOP_RUNTIME_ARCHIVE)
-      await expect(verifyRuntimeArchive(copied)).resolves.toBe(await fileDigest(join(source, DESKTOP_RUNTIME_ARCHIVE)))
-      await expect(ensureDesktopRuntime({ archive: copied, home: join(root, 'closure'), version: '1.0.0' }))
-        .resolves.toBe(join(root, 'closure', '1.0.0'))
-    } finally { rmSync(root, { recursive: true, force: true }) }
-  })
-
   it('validates Windows signing without requiring macOS identifiers for a Windows target', async () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     expect(() => createElectronBuilderConfig({
       DSH_DESKTOP_APP_ID: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
+      DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
       DSH_DESKTOP_TARGET_PLATFORM: 'win32',
     }, 'win32')).toThrow(/DSH_DESKTOP_WINDOWS_CER_FILE/u)
   })
@@ -150,6 +105,7 @@ describe('desktop macOS release signature', () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     const config = createElectronBuilderConfig({
       DSH_DESKTOP_APP_ID: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
+      DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
       DSH_DESKTOP_TARGET_PLATFORM: 'win32',
       DSH_DESKTOP_UNSIGNED: '1',
     }, 'win32', 'x64')
@@ -221,27 +177,13 @@ describe('desktop macOS release signature', () => {
     expect(() => resolveDesktopAppId({ DSH_DESKTOP_APP_ID: 'not-a-bundle-id' })).toThrow(/reverse-DNS/u)
     expect(() => resolveMacOSSigningEnvironment({})).toThrow(/DSH_DESKTOP_MACOS_SIGNING_IDENTITY/u)
     expect(() => resolveMacOSSigningEnvironment({
+      DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Developer ID Application: Example Company (TEAMID1234)',
+      DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234',
+    })).toThrow(/must omit/u)
+    expect(() => resolveMacOSSigningEnvironment({
       DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)',
       DSH_DESKTOP_MACOS_TEAM_ID: 'short',
     })).toThrow(/10 uppercase/u)
-  })
-
-  it('accepts a full certificate common name and derives the expected authority', () => {
-    const expected = resolveMacOSSigningEnvironment({
-      DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Developer ID Application: Example Company (TEAMID1234)',
-      DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234',
-    })
-    expect(expected).toEqual({
-      signingIdentity: 'Example Company (TEAMID1234)',
-      certificateName: 'Developer ID Application: Example Company (TEAMID1234)',
-      teamId: 'TEAMID1234',
-    })
-    expect(() => {
-      assertMacOSSignatureDetails([
-        `Authority=Developer ID Application: ${expected.signingIdentity}`,
-        `TeamIdentifier=${expected.teamId}`,
-      ].join('\n'), expected)
-    }).not.toThrow()
   })
 
   it('requires one complete notarization credential strategy', () => {

@@ -1,9 +1,0 @@
-DeepSeek Harness could not start
-DeepSeek Harness could not open your workspace. Choose a recovery action below: each one stops the current attempt and retries startup.
-Disabling third-party plugins keeps their files and starts DeepSeek Harness without them. Enable them again later from the Desktop Plugins window.
-Reset Desktop deletes all Desktop configuration and third-party plugins without a backup, then starts a fresh profile. Shared tasks and settings are kept.
-If application files are missing or damaged, close the application and reinstall it. Your tasks are stored separately.
-Failure details
-Close and restart
-Disable all third-party plugins and retry
-Reset Desktop and retry

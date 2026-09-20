@@ -1,5 +1,0 @@
-DeepSeek Harness could not start
-DeepSeek Harness could not open your workspace. Choose a recovery action below: each one stops the current attempt and retries startup.
-If application files are missing or damaged, close the application and reinstall it. Your tasks are stored separately.
-Failure details
-Close and restart

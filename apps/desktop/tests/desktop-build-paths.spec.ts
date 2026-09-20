@@ -1,7 +1,6 @@
 import { join, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  DESKTOP_RUNTIME_ARCHIVE,
   desktopTargetBuildPaths,
   resolveDesktopBuildTarget,
 } from '../scripts/desktop-build-paths.mjs'
@@ -18,12 +17,10 @@ describe('desktop build paths', () => {
       'packageSet',
       'dsh',
       'dshPnpm',
-      'nodeExtract',
+      'electron',
       'packedDsh',
       'packedVendor',
       'packedLandlock',
-      'archive',
-      'archiveDigest',
     ] as const
 
     for (const key of mutableKeys) {
@@ -32,8 +29,6 @@ describe('desktop build paths', () => {
     expect(arm64.artifacts).toContain(join('targets', 'mac-arm64', 'artifacts'))
     expect(x64.dsh).toContain(join('targets', 'mac-x64', 'dsh'))
     expect(windows.runtime).toContain(join('targets', 'win-x64', 'runtime'))
-    expect(windows.archive).toContain(join('targets', 'win-x64', DESKTOP_RUNTIME_ARCHIVE))
-    expect(windows.archiveDigest).toBe(`${windows.archive}.sha256`)
   })
 
   it('shares only the immutable upstream download cache', () => {

@@ -1,6 +1,7 @@
 # Agent Note: 在采用后的 Desktop 应用中安装 MCP 包
 
 Status: implemented
+Archived: 2026-09-20
 
 [English](2026-09-14-desktop-mcp-bundle-install.md) | 中文
 

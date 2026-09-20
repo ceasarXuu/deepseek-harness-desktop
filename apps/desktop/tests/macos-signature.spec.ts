@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { NotarizeOptions } from '@electron/notarize'
 import {
@@ -21,11 +22,17 @@ const RELEASE_ENVIRONMENT = {
   APPLE_API_KEY: '/private/credentials/AuthKey_TEST123456.p8',
   APPLE_API_KEY_ID: 'TEST123456',
   APPLE_API_ISSUER: '11111111-2222-3333-4444-555555555555',
-  DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com',
+  DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
 }
 
 function portablePath(value: string): string {
   return value.replaceAll('\\', '/')
+}
+
+/** Read the packaged version, which decides the release type the configuration publishes under. */
+function appVersion(): string {
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
+  return manifest.version
 }
 
 describe('desktop macOS release signature', () => {
@@ -68,12 +75,13 @@ describe('desktop macOS release signature', () => {
         sign: true,
         writeUpdateInfo: false,
       },
-      publish: [{
-        provider: 'generic',
-        url: 'https://desktop-updates.example.com/dsh-desk/feeds/mac-arm64/',
-        channel: 'nightly',
-      }],
     })
+    expect(config.publish).toEqual([{
+      provider: 'github',
+      owner: 'example',
+      repo: 'desktop-releases',
+      releaseType: /-/u.test(appVersion()) ? 'prerelease' : 'release',
+    }])
     expect(typeof config.artifactBuildCompleted).toBe('function')
   })
 
@@ -176,10 +184,14 @@ describe('desktop macOS release signature', () => {
     expect(() => resolveDesktopAppId({})).toThrow(/DSH_DESKTOP_APP_ID/u)
     expect(() => resolveDesktopAppId({ DSH_DESKTOP_APP_ID: 'not-a-bundle-id' })).toThrow(/reverse-DNS/u)
     expect(() => resolveMacOSSigningEnvironment({})).toThrow(/DSH_DESKTOP_MACOS_SIGNING_IDENTITY/u)
-    expect(() => resolveMacOSSigningEnvironment({
+    expect(resolveMacOSSigningEnvironment({
       DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Developer ID Application: Example Company (TEAMID1234)',
       DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234',
-    })).toThrow(/must omit/u)
+    })).toEqual({
+      signingIdentity: 'Example Company (TEAMID1234)',
+      certificateName: 'Developer ID Application: Example Company (TEAMID1234)',
+      teamId: 'TEAMID1234',
+    })
     expect(() => resolveMacOSSigningEnvironment({
       DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)',
       DSH_DESKTOP_MACOS_TEAM_ID: 'short',

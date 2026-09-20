@@ -4,7 +4,7 @@ Status: implemented
 
 English | [中文](2026-09-13-adopt-upstream-desktop.zh.md)
 
-The delivery format this fork keeps is the [runtime archive](2026-09-13-desktop-runtime-archive.md); the destination it publishes to is the [release destination](2026-09-13-desktop-release-destination.md).
+The destination this fork publishes to is the [release destination](2026-09-13-desktop-release-destination.md); which of the differences this note lists upstream has since made unnecessary is recorded in [following upstream's Desktop delivery](2026-09-20-upstream-desktop-delivery-and-release-identity.md).
 
 ## Problem
 
@@ -20,14 +20,14 @@ This note consolidates the composition note (`2026-09-12-desktop-application-com
 
 What survives from the fork's own work is everything independent of the application's internals:
 
-- **Runtime delivery.** The production dependency tree travels as one verified archive that the first launch expands under `$DSH_HOME/closure/<version>` ([archive decision](2026-09-13-desktop-runtime-archive.md)). Upstream carries the tree as loose bundle resources.
 - **Release identity.** The bundle identifier, signing identity, notarization credentials, and the release repository are this fork's ([release destination](2026-09-13-desktop-release-destination.md)). Upstream publishes to its own origin, credentials, and bundle identifier.
-- **Dormant plugin work.** `desktop/packages/plugin-store` and `desktop/packages/ui-plugin-store` stay in the tree but outside the workspace, so they neither build nor run. Upstream's plugin manager window over the bundled pnpm expresses the same capability today; the MCP package surface those packages carried is not re-expressed yet.
-- **Assets.** `desktop/build/icons` and `desktop/build/entitlements.mac.plist` stay. Upstream's packaging uses Electron's default icon, so adopting the icons is a product change with its own verification rather than part of this decision.
+- **Assets.** `desktop/build/icons` and `desktop/build/entitlements.mac.plist` stay, and the packaging configuration names `icon-dark.icns` as the macOS icon. Upstream ships its own icons as well, so the fork's icon is a brand choice rather than a gap being filled.
+
+The **runtime delivery** this note originally kept — one verified archive expanded under `$DSH_HOME/closure/<version>` — is gone, and the dormant `plugin-store` packages went with it: upstream packs the tree into `app.asar` and manages plugins from its own Web panel. [Following upstream's Desktop delivery](2026-09-20-upstream-desktop-delivery-and-release-identity.md) records why the fork stopped carrying them.
 
 ## Patch surface
 
-Every fork change inside `apps/desktop` is a merge conflict at the next upstream sync, so the surface is enumerated in [desktop/README.md](../../../../desktop/README.md) and kept as small as the delivery difference allows. The patches are of two kinds: the delivery itself (the archive module and tests, the startup wiring that expands it with progress, the packaging steps that produce and carry it) and the release identity (the signing-identity patch that accepts a full certificate common name, the payload smoke's removed `fs-ext` check, and the release destination).
+Every fork change inside `apps/desktop` is a merge conflict at the next upstream sync, so the surface is enumerated in [desktop/README.md](../../../../desktop/README.md) and kept as small as the release identity allows. The patches are the release identity alone: the signing-identity patch that accepts a full certificate common name, the release destination, and the packaging steps each of them touches.
 
 Upstream-owned Agent Notes are left alone, including the [packaging and updates note](2026-08-25-electron-desktop-packaging-and-updates.md) whose release destination this fork changes; the fork's own notes state where its behavior differs.
 
@@ -47,4 +47,4 @@ The fork tracks upstream's application and inherits its profile format, plugin t
 
 The fork's own application code is gone, together with the tests that pinned it. The constraints its design established still hold and are now upstream's to keep: the harness never runs in Electron's main process, a packaged application carries a real dependency tree rather than an archive it reads through, and the window opens only after a readiness handshake rather than on a timer.
 
-The delivery difference costs a first-launch expansion upstream does not have, and the release difference costs a release workflow upstream does not have. The archive decision's acceptance measures the first; the [release destination](2026-09-13-desktop-release-destination.md) owns the second.
+The release difference costs a release workflow upstream does not have, and the [release destination](2026-09-13-desktop-release-destination.md) owns it. The delivery difference is gone: upstream's own packaging replaced it, so the fork now follows upstream's application without expanding anything on first launch.

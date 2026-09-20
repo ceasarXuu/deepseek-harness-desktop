@@ -1,6 +1,7 @@
 # Agent Note: Desktop recovery, updates, and diagnostics
 
 Status: implemented
+Archived: 2026-09-20
 
 English | [中文](2026-09-14-desktop-experience-surfaces.zh.md)
 

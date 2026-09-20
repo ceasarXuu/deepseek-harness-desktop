@@ -7,7 +7,7 @@ import { loadDesktopPackageEnvironment, validateDesktopPackageEnvironment } from
 const WINDOWS = { platform: 'win32', arch: 'x64' } as const
 const MACOS = { platform: 'darwin', arch: 'arm64' } as const
 const POLICY = { DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com' }
-const RELEASE = { ...POLICY, DSH_DESKTOP_APP_ID: 'com.example.desktop', DOWNLOAD_TEST_ORIGIN: 'https://updates.example.com' }
+const RELEASE = { ...POLICY, DSH_DESKTOP_APP_ID: 'com.example.desktop', DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases' }
 const MAC_IDENTITY = { DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)', DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234' }
 
 async function withDirectory(action: (directory: string) => Promise<void>): Promise<void> {
@@ -32,6 +32,7 @@ describe('Desktop local packaging configuration', () => {
         dsh_desktop_mandatory_update_prod_origin: 'https://stale.example.com',
         DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'stale-pin', APPLE_ID: 'stale-apple-id',
         CSC_LINK: 'stale-certificate', DOWNLOAD_TEST_ORIGIN: 'https://stale.example.com',
+        DSH_DESKTOP_UPDATE_REPOSITORY: 'stale/desktop-releases',
         dsh_desktop_windows_key_container: 'case-insensitive-stale-container',
       }
       expect(loadDesktopPackageEnvironment('win32', parent, directory)).toEqual({
@@ -82,7 +83,7 @@ describe('Desktop local packaging configuration', () => {
     }).toThrow(/reverse-DNS/u)
     expect(() => {
       validateDesktopPackageEnvironment({ ...POLICY, DSH_DESKTOP_APP_ID: RELEASE.DSH_DESKTOP_APP_ID }, WINDOWS)
-    }).toThrow(/DOWNLOAD_TEST_ORIGIN/u)
+    }).toThrow(/DSH_DESKTOP_UPDATE_REPOSITORY/u)
     expect(() => {
       validateDesktopPackageEnvironment(RELEASE, WINDOWS)
     }).toThrow(/DSH_DESKTOP_WINDOWS_CER_FILE/u)

@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-09-13-adopt-upstream-desktop.md) | 中文
 
-本 fork 保留的交付形态是[运行时归档](2026-09-13-desktop-runtime-archive.zh.md)；它发布的目标是[发布目标](2026-09-13-desktop-release-destination.zh.md)。
+它发布的目标是[发布目标](2026-09-13-desktop-release-destination.zh.md)；本笔记所列差异中哪些已被上游取代，记录在[跟随上游的 Desktop 交付形态](2026-09-20-upstream-desktop-delivery-and-release-identity.zh.md)。
 
 ## 问题
 
@@ -20,14 +20,14 @@ Status: implemented
 
 本 fork 自身工作中留存下来的，是与应用内部无关的全部内容：
 
-- **运行时交付。** 生产依赖树以单个已验证归档分发，由首次启动展开到 `$DSH_HOME/closure/<版本>`（[归档决策](2026-09-13-desktop-runtime-archive.zh.md)）。上游以散文件资源携带该依赖树。
 - **发布身份。** Bundle ID、签名身份、公证凭据与发布仓库属于本 fork（[发布目标](2026-09-13-desktop-release-destination.zh.md)）。上游发布到它自己的 origin、凭据与 Bundle ID。
-- **休眠的插件工作。** `desktop/packages/plugin-store` 与 `desktop/packages/ui-plugin-store` 留在树内但在工作区之外，因此既不构建也不运行。上游基于内置 pnpm 的插件管理窗目前表达着同一能力；这两个包曾承载的 MCP 包面尚未在那里重新表达。
-- **资源。** `desktop/build/icons` 与 `desktop/build/entitlements.mac.plist` 保留。上游打包使用 Electron 默认图标，因此启用这些图标属于需要单独验收的产品改动，不属于本决策。
+- **资源。** `desktop/build/icons` 与 `desktop/build/entitlements.mac.plist` 保留，打包配置把 `icon-dark.icns` 指定为 macOS 图标。上游同样自带图标，因此本 fork 的图标属于品牌选择，而不是在填补空缺。
+
+本笔记最初保留的**运行时交付**——单个已验证归档展开到 `$DSH_HOME/closure/<版本>`——已经取消，休眠的 `plugin-store` 两个包随之删除：上游把依赖树打进 `app.asar`，并从自己的 Web 面板管理插件。[跟随上游的 Desktop 交付形态](2026-09-20-upstream-desktop-delivery-and-release-identity.zh.md)记录了本 fork 为何不再携带它们。
 
 ## 补丁面
 
-`apps/desktop` 内的每一处 fork 改动都会成为下次上游同步的合并冲突，因此[desktop/README.md](../../../../desktop/README.zh.md)列出了全部补丁面，并让其尽可能小。补丁分两类：交付本身（归档模块及其测试、带进度展开它的启动接线、产出并携带它的打包步骤），以及发布身份（接受完整证书通用名的签名身份补丁、产物 smoke 中移除的 `fs-ext` 检查、发布目标）。
+`apps/desktop` 内的每一处 fork 改动都会成为下次上游同步的合并冲突，因此[desktop/README.md](../../../../desktop/README.zh.md)列出了全部补丁面，并让其尽可能小。补丁只剩发布身份一类（接受完整证书通用名的签名身份补丁、发布目标，以及它们各自触及的打包步骤）。
 
 上游所有的 Agent Note 一律不动，包括本 fork 改变了其发布目标的[打包与更新决策](2026-08-25-electron-desktop-packaging-and-updates.zh.md)；本 fork 自己的记录会说明它在哪里不同。
 
@@ -47,4 +47,4 @@ Status: implemented
 
 本 fork 自研的应用代码已删除，连同固定它们的测试。其设计确立的约束依然成立，只是现在由上游维护：harness 绝不在 Electron 主进程中运行；打包应用携带真实的依赖树，而不是通过归档读取的树；窗口只在就绪握手之后打开，而不是按定时器打开。
 
-交付差异带来上游没有的首次启动展开，发布差异带来上游没有的发布 workflow。归档决策的验收测量前者；[发布目标](2026-09-13-desktop-release-destination.zh.md)负责后者。
+发布差异带来上游没有的发布 workflow，并[由发布目标负责](2026-09-13-desktop-release-destination.zh.md)。交付差异已经消失：上游自己的打包取代了它，因此本 fork 现在跟随上游应用，首次启动不再展开任何东西。

@@ -4,7 +4,7 @@ Status: implemented
 
 English | [中文](2026-09-13-desktop-release-destination.zh.md)
 
-The application that consumes the release is the [adopted upstream application](2026-09-13-adopt-upstream-desktop.md); what a release carries is the [runtime archive](2026-09-13-desktop-runtime-archive.md).
+The application that consumes the release is the [adopted upstream application](2026-09-13-adopt-upstream-desktop.md); what a release carries is upstream's own packaged application, as [following upstream's Desktop delivery](2026-09-20-upstream-desktop-delivery-and-release-identity.md) records.
 
 ## Problem
 

@@ -17,8 +17,9 @@ const environment = {
   DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)',
   DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234',
   APPLE_KEYCHAIN_PROFILE: 'fixture-profile',
-  DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com',
+  DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
 }
+const destination = { owner: 'example', repo: 'desktop-releases', releaseType: 'prerelease' } as const
 
 function barrier() {
   let release!: () => void
@@ -32,9 +33,7 @@ async function fixture(arch: 'arm64' | 'x64' = 'arm64') {
   const appPath = join(artifactsRoot, arch === 'arm64' ? 'mac-arm64' : 'mac', 'DeepSeek Harness.app')
   await mkdir(join(appPath, 'Contents', 'Resources'), { recursive: true })
   await writeFile(join(appPath, 'payload'), 'signed content')
-  await writeMacOSAppUpdateConfig(join(appPath, 'Contents', 'Resources'), {
-    publicUrl: `https://desktop-updates.example.com/dsh-desk/feeds/mac-${arch}/`,
-  }, 'deepseek-harness-updater')
+  await writeMacOSAppUpdateConfig(join(appPath, 'Contents', 'Resources'), destination, 'deepseek-harness-updater')
   const version = '1.2.3-alpha.1'
   const base = `deepseek-harness-${version}-mac-${arch}`
   const request = { arch, artifactsRoot, version, environment }
@@ -107,7 +106,7 @@ describe('parallel macOS artifacts', () => {
         .toEqual({ payload: 'signed content', appTicket: false })
       expect(await readFile(join(f.appPath, 'ticket'), 'utf8')).toBe('accepted')
       expect(await readFile(join(f.appPath, 'Contents', 'Resources', 'app-update.yml'), 'utf8'))
-        .toContain(`/dsh-desk/feeds/mac-${arch}/`)
+        .toContain('provider: github')
       expect((await readdir(f.root)).sort()).toEqual(['artifacts'])
       expect(f.apple.verifySignature).toHaveBeenCalledTimes(4)
       expect(f.apple.verifyNotarization).toHaveBeenCalledTimes(1)
@@ -161,11 +160,11 @@ describe('parallel macOS artifacts', () => {
     }
   })
 
-  it.each(['copy', 'signature', 'post-signature', 'ticket', 'metadata', 'update-config', 'post-update-config'] as const)('rejects incomplete %s qualification without promoting artifacts', async (failure) => {
+  it.each(['copy', 'signature', 'post-signature', 'ticket', 'update-config', 'post-update-config'] as const)('rejects incomplete %s qualification without promoting artifacts', async (failure) => {
     const f = await fixture()
     try {
       if (failure === 'update-config') {
-        await writeFile(join(f.appPath, 'Contents', 'Resources', 'app-update.yml'), 'provider: generic\nurl: https://wrong.example.com/\nchannel: nightly\nupdaterCacheDirName: fixture\n')
+        await writeFile(join(f.appPath, 'Contents', 'Resources', 'app-update.yml'), 'provider: github\nowner: other\nrepo: desktop-releases\nreleaseType: prerelease\nupdaterCacheDirName: fixture\n')
       }
       let signatureChecks = 0
       const apple: MacOSArtifactOperations = {
@@ -181,9 +180,6 @@ describe('parallel macOS artifacts', () => {
       }
       await expect(packageMacOSArtifacts(f.request, async (artifact) => {
         await f.build(artifact)
-        if (failure === 'metadata' && artifact.format === 'zip') {
-          await writeFile(join(artifact.output, 'nightly-mac.yml'), '')
-        }
         if (failure === 'post-update-config' && artifact.format === 'zip') {
           await writeFile(join(artifact.appPath, 'Contents', 'Resources', 'app-update.yml'), '{}')
         }

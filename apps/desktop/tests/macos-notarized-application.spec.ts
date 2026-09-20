@@ -9,7 +9,11 @@ vi.mock('node:child_process', async importOriginal => ({
   spawnSync: vi.fn(),
 }))
 
-const expected = { signingIdentity: 'Example Company (TEAMID1234)', teamId: 'TEAMID1234' }
+const expected = {
+  signingIdentity: 'Example Company (TEAMID1234)',
+  certificateName: 'Developer ID Application: Example Company (TEAMID1234)',
+  teamId: 'TEAMID1234',
+}
 const appPath = '/private build/DeepSeek Harness.app'
 const commands = [
   ['/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath]],

@@ -4,7 +4,7 @@
 
 DeepSeek Harness 的桌面发行版：一个已签名、自包含的 macOS 应用，无需终端、无需系统 Node.js，也无需单独启动任何服务，即可运行 harness 及其浏览器界面。
 
-应用本体来自上游——`apps/desktop`（Electron 壳）与 `apps/desktop-host`（私有 Host 进程）。本子树记录本 fork 在它周边改了什么、从自研实现中保留了什么，以及一次发布如何产生。[采用决策](../.agents/notes/implemented/architecture/2026-09-13-adopt-upstream-desktop.zh.md)负责说明原因。
+应用本体来自上游——`apps/desktop`（Electron 壳）与 `apps/desktop-host`（私有 Host 进程），其组合方式、运行时布局、profile 处理、插件事务、恢复动作与更新单元均保持不变。本子树拥有的是发布从哪里来：本 fork 发布到哪个 GitHub release，以及用什么身份签名。[发布目标决策](../.agents/notes/implemented/architecture/2026-09-13-desktop-release-destination.zh.md)负责说明原因。
 
 ## 与 harness 的关系
 
@@ -18,50 +18,41 @@ DeepSeek Harness 的桌面发行版：一个已签名、自包含的 macOS 应�
 
 本仓库是 `deepseek-ai/deepseek-harness` 的长期 fork。开发在此进行；上游 `master` 只用于拉取更新。为桌面应用开发的内容一概不回贡上游。
 
-这一安排让一个性质成为关键：**拉取上游的成本，与本 fork 改动多少上游文件成正比。** 每个被改动的上游文件都会在下次同步时变成合并冲突，因此桌面侧的工作优先新增文件，只在交付或发布身份确实需要时才修改既有文件。
+这一安排让一个性质成为关键：**拉取上游的成本，与本 fork 改动多少上游文件成正比。** 每个被改动的上游文件都会在下次同步时变成合并冲突，因此桌面侧的工作优先新增文件，只在发布身份确实需要时才修改既有文件。当上游改动了交付方式或打包路径、使某处 fork 改动不再必要时，该改动会被丢弃，而不是继续携带。
 
 ### 本 fork 改动的上游文件
 
-往这张表里加一行是一个决策，而不是副作用。
+往这张表里加一行是一个决策，而不是副作用。上游自己的 [`apps/desktop/README.md`](../apps/desktop/README.zh.md) 记录了这些改动所取代的腾讯 COS 目标；打包各阶段本身未变。
 
 | 文件 | 改动 | 为何无法避免 |
 |---|---|---|
-| [`apps/desktop/src/runtime-closure.ts`](../apps/desktop/src/runtime-closure.ts)、[`apps/desktop/tests/runtime-closure.spec.ts`](../apps/desktop/tests/runtime-closure.spec.ts) | 新增模块与测试：打包、摘要、展开并自愈运行时归档 | 这就是交付形态；上游以散文件资源携带依赖树 |
-| [`apps/desktop/src/main.ts`](../apps/desktop/src/main.ts) | 在后端启动前把归档展开到 `$DSH_HOME/closure/<版本>`，并上报进度 | 上游假定的运行时位置是 `resources/dsh`，本 fork 不再携带 |
-| [`apps/desktop/src/paths.ts`](../apps/desktop/src/paths.ts) | 增加闭包根目录 | 展开目录属于 Electron 所有的路径 |
-| [`apps/desktop/src/backend-controller.ts`](../apps/desktop/src/backend-controller.ts) | 在 `starting` 后端状态中携带展开进度 | 加载窗口需要渲染它 |
-| [`apps/desktop/renderer/startup.html`](../apps/desktop/renderer/startup.html)、[`startup.js`](../apps/desktop/renderer/startup.js)、[`startup.css`](../apps/desktop/renderer/startup.css)、[`src/locale.ts`](../apps/desktop/src/locale.ts) | 确定进度条及其中英文案 | 首次启动要展开一万一千个文件；没有标签的转圈看起来像卡死 |
-| [`apps/desktop/scripts/prepare-dsh.ts`](../apps/desktop/scripts/prepare-dsh.ts) | 打包已验证的依赖树，并证明归档能还原出它 | 当打包内容不是被验证的内容时，构建必须失败 |
-| [`apps/desktop/scripts/desktop-build-paths.mjs`](../apps/desktop/scripts/desktop-build-paths.mjs)（含 [`.d.mts`](../apps/desktop/scripts/desktop-build-paths.d.mts)） | 增加归档与摘要路径 | 每个目标拥有自己的归档 |
-| [`apps/desktop/electron-builder.config.mjs`](../apps/desktop/electron-builder.config.mjs)（含 [`.d.mts`](../apps/desktop/electron-builder.config.d.mts)） | 携带归档与摘要而非散文件树，在 `afterPack`/`afterSign` 校验，并以 `github` provider 发布 | 资源映射、构建期校验与发布目标都在此配置 |
-| [`apps/desktop/electron-builder.config.mjs`](../apps/desktop/electron-builder.config.mjs) | 把 `mac.icon` 设为 [`desktop/build/icons/icon-dark.icns`](build/icons) | 打包从未设置图标，macOS 因此回退到 Electron 默认图标；该图标位于本子树，是因为本 fork 删除的壳把它作为资产保留在此 |
-| [`apps/desktop/scripts/desktop-auto-update-environment.mjs`](../apps/desktop/scripts/desktop-auto-update-environment.mjs)（含 [`.d.mts`](../apps/desktop/scripts/desktop-auto-update-environment.d.mts)） | 解析 GitHub 仓库、发布 tag 与发布类型，取代腾讯 COS origin 与 bucket | 本 fork 发布到自己的仓库 |
-| [`apps/desktop/scripts/desktop-upload-plan.ts`](../apps/desktop/scripts/desktop-upload-plan.ts)、[`apps/desktop/scripts/upload-target.ts`](../apps/desktop/scripts/upload-target.ts) | 验证同样的产物并作为 GitHub release 资源上传 | 带校验的上传才是重点，只有传输方式改变 |
-| [`apps/desktop/src/desktop-update-metadata.ts`](../apps/desktop/src/desktop-update-metadata.ts)、[`apps/desktop/tests/desktop-update-metadata.spec.ts`](../apps/desktop/tests/desktop-update-metadata.spec.ts) | 新增模块与测试：写出 `app-update.yml` 与频道元数据 | electron-builder 只在构建安装器目标的那一趟产出它们，而本应用是从已打包目录构建安装器的 |
-| [`apps/desktop/scripts/package-target.ts`](../apps/desktop/scripts/package-target.ts) | 记录 tag 与发布类型，并从打包子进程中移除 `GH_TOKEN`/`GITHUB_TOKEN` | 上传需要一条可信记录，而打包本身不需要凭据 |
-| [`apps/desktop/scripts/desktop-release-environment.mjs`](../apps/desktop/scripts/desktop-release-environment.mjs)（含 [`.d.mts`](../apps/desktop/scripts/desktop-release-environment.d.mts)）、[`verify-macos-signature.mjs`](../apps/desktop/scripts/verify-macos-signature.mjs)、[`tests/macos-signature.spec.ts`](../apps/desktop/tests/macos-signature.spec.ts) | 接受完整证书通用名并据此推导短名 | 本机钥匙串中存在两个短名相同的证书，名称匹配因此有歧义 |
-| [`apps/desktop/tests/fixtures/runtime-payload-smoke.mjs`](../apps/desktop/tests/fixtures/runtime-payload-smoke.mjs) | 移除 `fs-ext` 检查 | `@deepseek-ai/node-addon-system` 取代了该依赖，闭包中已无此文件 |
-| [`apps/desktop/tests/main-startup.spec.ts`](../apps/desktop/tests/main-startup.spec.ts)、[`startup-renderer.spec.ts`](../apps/desktop/tests/startup-renderer.spec.ts)、[`macos-signature.spec.ts`](../apps/desktop/tests/macos-signature.spec.ts)、[`desktop-build-paths.spec.ts`](../apps/desktop/tests/desktop-build-paths.spec.ts)、[`desktop-auto-update-environment.spec.ts`](../apps/desktop/tests/desktop-auto-update-environment.spec.ts)、[`desktop-upload-plan.spec.ts`](../apps/desktop/tests/desktop-upload-plan.spec.ts)、[`package-target.spec.ts`](../apps/desktop/tests/package-target.spec.ts) | 跟随上述行为 | 测试描述的是本 fork 交付的行为 |
+| [`apps/desktop/scripts/desktop-auto-update-environment.mjs`](../apps/desktop/scripts/desktop-auto-update-environment.mjs)（含 [`.d.mts`](../apps/desktop/scripts/desktop-auto-update-environment.d.mts)） | 解析 GitHub 仓库、发布 tag 与发布类型，取代腾讯 COS origin 与 bucket；从版本的预发布段推导频道元数据文件名 | 本 fork 发布到自己的仓库，且更新器的 GitHub provider 从版本推导频道 |
+| [`apps/desktop/scripts/desktop-package-environment.mjs`](../apps/desktop/scripts/desktop-package-environment.mjs) | 接受 `DSH_DESKTOP_UPDATE_REPOSITORY` 作为发布设置 | test 部署需要声明它发布到哪个仓库 |
+| [`apps/desktop/scripts/desktop-upload-plan.ts`](../apps/desktop/scripts/desktop-upload-plan.ts)、[`apps/desktop/scripts/upload-target.ts`](../apps/desktop/scripts/upload-target.ts) | 验证同样的完成记录、频道元数据、大小与摘要，再作为 GitHub release 资源上传；macOS lane 不上传频道元数据 | 带校验的上传才是重点，只有传输方式改变；且一次 release 只携带一份合并后的 macOS 频道文件 |
+| [`apps/desktop/scripts/macos-app-update-config.mjs`](../apps/desktop/scripts/macos-app-update-config.mjs)（含 [`.d.mts`](../apps/desktop/scripts/macos-app-update-config.d.mts)） | 写出并校验 `github` provider 的 `app-update.yml`，取代固定的 generic feed | 打包后的应用从该文件读取它更新的仓库 |
+| [`apps/desktop/scripts/electron-builder-config.mjs`](../apps/desktop/scripts/electron-builder-config.mjs) | 以 `github` provider 发布，并把 [`desktop/build/icons/icon-dark.icns`](build/icons) 指定为 macOS 图标 | 发布目标与本 fork 的应用图标在此配置 |
+| [`apps/desktop/scripts/package-macos.ts`](../apps/desktop/scripts/package-macos.ts) | 校验各 lane 产物旁的频道文件，但不提升它 | 合并后的频道文件由 `finalize:mac:channel` 从 release 组装 |
+| [`apps/desktop/scripts/package-target.ts`](../apps/desktop/scripts/package-target.ts) | 在完成记录中写入 tag 与发布类型，并从打包子进程中移除 `GH_TOKEN`/`GITHUB_TOKEN` | 上传需要一条可信记录，而打包本身不需要凭据 |
+| [`apps/desktop/package.json`](../apps/desktop/package.json) | 增加 `finalize:mac:channel` 脚本 | 发布 workflow 会调用它 |
+| [`apps/desktop/scripts/desktop-release-environment.mjs`](../apps/desktop/scripts/desktop-release-environment.mjs)（含 [`.d.mts`](../apps/desktop/scripts/desktop-release-environment.d.mts)）、[`verify-macos-signature.mjs`](../apps/desktop/scripts/verify-macos-signature.mjs) | 接受完整证书通用名并据此推导短名 | 本机钥匙串中存在两个短名相同的证书，名称匹配因此有歧义 |
+| [`apps/desktop/tests/desktop-auto-update-environment.spec.ts`](../apps/desktop/tests/desktop-auto-update-environment.spec.ts)、[`desktop-upload-plan.spec.ts`](../apps/desktop/tests/desktop-upload-plan.spec.ts)、[`macos-app-update-config.spec.ts`](../apps/desktop/tests/macos-app-update-config.spec.ts)、[`macos-signature.spec.ts`](../apps/desktop/tests/macos-signature.spec.ts)、[`package-macos.spec.ts`](../apps/desktop/tests/package-macos.spec.ts)、[`package-target.spec.ts`](../apps/desktop/tests/package-target.spec.ts) | 跟随上述行为 | 测试描述的是本 fork 交付的行为 |
 
 本子树需要的其他一切均为自己的文件：发布 workflow、Agent Note、历史发布文档，以及本文档。
-
-让清单保持很短的规则是：fork 改动只在交付或发布身份需要时进入 `apps/desktop`，除非平台本身要求，绝不进入 harness 包。
 
 ## 休眠资产
 
 | 路径 | 状态 | 保留原因 |
 |---|---|---|
-| [`packages/plugin-store`](packages/plugin-store)、[`packages/ui-plugin-store`](packages/ui-plugin-store) | 在工作区之外：既不构建也不运行 | 它们承载的能力现以 [`apps/desktop/src/mcp-bundles.ts`](../apps/desktop/src/mcp-bundles.ts)（安装、注册表、生成的插件）与插件窗的 MCP 包区块交付；这两个包仅作为更早的实现保留 |
-| [`build/icons`](build/icons)、[`build/entitlements.mac.plist`](build/entitlements.mac.plist) | 深色图标已用于 macOS 打包；其余图标与该 entitlements 文件仍未使用 | 只有 [`icon-dark.icns`](build/icons) 被上游配置引用，因此浅色、透明与通用图标继续休眠；上游配置不使用 entitlements 文件 |
+| [`build/entitlements.mac.plist`](build/entitlements.mac.plist)、[`build/icons`](build/icons) 中的浅色、透明与通用图标 | 未使用：打包配置只指定 `icon-dark.icns`，而上游配置不使用任何 entitlements 文件 | 本 fork 已删除的壳把其资产保留在此 |
 | [`docs/releases`](docs/releases/README.zh.md) | 历史发布规划 | 记录每个版本当初的目标 |
 
 ## 标签与发布
 
-一次发布以 `v<版本>` 打 tag，并由[发布 workflow](../.github/workflows/desktop-release.yml)发布为本仓库 `ceasarXuu/deepseek-harness-desktop` 中的 GitHub release。tag 就是版本本身，因为更新器的 GitHub provider 按语义版本比较 release tag，并从版本的预发布段推导预发布通道。`dsh-v*` 前缀属于上游发布列车，其标签会随每次上游拉取到来，因此不能共用。[发布目标决策](../.agents/notes/implemented/architecture/2026-09-13-desktop-release-destination.zh.md)负责说明更新源、凭据与上传校验。
+一次发布以 `v<版本>` 打 tag，并由[发布 workflow](../.github/workflows/desktop-release.yml)发布为本仓库 `ceasarXuu/deepseek-harness-desktop` 中的 GitHub release。tag 就是版本本身，因为更新器的 GitHub provider 按语义版本比较 release tag，并从版本的预发布段推导预发布通道，因此 `0.1.6-alpha.2` 在 tag `v0.1.6-alpha.2` 下发布 `alpha-mac.yml`，稳定版本则发布 `latest-mac.yml`。`dsh-v*` 前缀属于上游发布列车，其标签会随每次上游拉取到来，因此不能共用。[发布目标决策](../.agents/notes/implemented/architecture/2026-09-13-desktop-release-destination.zh.md)负责说明更新源、凭据与上传校验。
 
 ## 预发布立场
 
-本仓库的预发布立场在此完全适用：本 fork 没有外部消费者，因此优先选择正确的基础，而不是兼容垫片；磁盘格式可以改版，而不必迁移。这就是运行时归档对它首个写入的格式不提供迁移路径的原因。
+本仓库的预发布立场在此完全适用：本 fork 没有外部消费者，因此优先选择正确的基础，而不是兼容垫片；磁盘格式可以改版，而不必迁移。
 
 ## 本机工具链
 
@@ -75,7 +66,7 @@ DeepSeek Harness 的桌面发行版：一个已签名、自包含的 macOS 应�
 
 ## 本地构建
 
-三档成本，对应三类改动。
+两档成本，对应两类改动。
 
 **直接从源码树运行。** 外壳与 harness 都运行工作区构建出的产物，因此界面工作完全不需要打包：
 
@@ -92,18 +83,18 @@ pnpm run package:desktop:mac:arm64:dir
 ditto "apps/desktop/.desktop-build/targets/mac-arm64/artifacts/mac-arm64/DeepSeek Harness.app" "/Applications/DeepSeek Harness.app"
 ```
 
-用它可以验证打包后的应用真实行为——首次启动展开、Resources 路径、崩溃处理——这些都不是源码树运行能复现的。但这里测不了更新：更新器读的是发布源，而 `--dir` 产物里没有可供更新的安装包。
+用它可以验证打包后的应用真实行为——Resources 路径、自带运行时、崩溃处理——这些都不是源码树运行能复现的。但这里测不了更新：更新器读的是发布源，而 `--dir` 产物里没有可供更新的安装包。
 
-**构建交付物。** 发布命令产出已签名并公证的 DMG 与 ZIP，上传步骤把它们发布出去：
+**构建交付物。** 每条打包命令都要求签名与公证凭据，它们以 secret 形式保存在 CI，因此发布由 workflow 构建，而不是在工作站上：
 
 ```sh
 pnpm run package:desktop:mac:arm64   # or package:desktop:mac:x64
 GH_TOKEN=$(gh auth token) pnpm run upload:mac:arm64
 ```
 
-每条打包命令都会执行正式构建、打包第一方生产依赖闭包、准备目标 Node.js 与 pnpm 运行时、物化并验证 dsh 依赖树、把它连同摘要打包为 `desktop-runtime.tar.zst`，并展开该归档以证明它能还原出依赖树。应用资源携带归档、其摘要，以及 Node.js 与 pnpm 运行时。
+一次打包命令会准备目标运行时、物化并验证 dsh 依赖树、构建应用，并产出 DMG、ZIP 及其 blockmap 与该版本的频道元数据。打包读取 `apps/desktop/.env.macos`，其发布设置从不回退到 shell 环境；[其模板](../apps/desktop/.env.macos.example)列出所有可接受的设置。签名与公证会完成该请求所需的 Apple 侧检查。
 
-签名与公证环境、更新目标与上传凭据见[应用 README](../apps/desktop/README.zh.md)。
+发布 workflow 用其 secret 写出该文件，打包两个 macOS 目标，对刚产出的产物校验签名、Gatekeeper 与已装订的票据，上传二进制，并最后发布合并后的频道文件。Windows 发布仍然不可及：签名需要挂在自托管 runner 上的 SafeNet token，因此该 lane 只把未签名安装器作为 workflow 产物，不触碰任何 release。
 
 ## 发布
 

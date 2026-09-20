@@ -7,8 +7,10 @@ import { join, resolve } from 'node:path'
 import {
   desktopBuildRecordFilename,
   resolveDesktopAutoUpdateConfig,
+  type DesktopAutoUpdateConfig,
 } from './desktop-auto-update-environment.mjs'
 import { desktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { writeUpdateMetadata } from '../src/desktop-update-metadata.ts'
 import { packageMacOSArtifacts, type DesktopPrepackagedArtifact } from './package-macos.ts'
 import { loadDesktopPackageEnvironment, validateDesktopPackageEnvironment } from './desktop-package-environment.mjs'
 import { createPackagingRun } from './packaging-run.mjs'
@@ -24,10 +26,8 @@ const WINDOWS_SIGNING_ENV_NAMES = [
   'DSH_DESKTOP_WINDOWS_TOKEN_PIN',
 ] as const
 const DESKTOP_UPLOAD_CREDENTIAL_ENV_NAMES = new Set([
-  'DOWNLOAD_TEST_COS_SECRET_ID',
-  'DOWNLOAD_TEST_COS_SECRET_KEY',
-  'DOWNLOAD_PROD_COS_SECRET_ID',
-  'DOWNLOAD_PROD_COS_SECRET_KEY',
+  'GH_TOKEN',
+  'GITHUB_TOKEN',
 ])
 
 /** Fixed platform and architecture identifiers exposed by package scripts. */
@@ -96,7 +96,7 @@ export function desktopElectronBuilderEnvironment(environment: NodeJS.ProcessEnv
 }
 
 /**
- * Remove upload-only COS credentials from every packaging subprocess.
+ * Remove upload credentials from every packaging subprocess.
  * @param environment - Packaging command environment.
  * @returns A copy without Desktop upload credentials.
  */
@@ -119,22 +119,19 @@ function packageVersion(path: string, label: string): string {
 
 function writeReleaseRecord(
   target: DesktopPackageTarget,
-  environment: NodeJS.ProcessEnv,
   artifactsRoot: string,
+  version: string,
+  update: DesktopAutoUpdateConfig,
 ): void {
-  const desktopVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
-  const dshVersion = packageVersion(join(REPOSITORY_ROOT, 'package.json'), 'dsh package')
-  if (desktopVersion !== dshVersion) {
-    throw new Error(`desktop package: desktop version ${desktopVersion} does not match dsh version ${dshVersion}`)
-  }
-  const update = resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
   const recordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   const temporaryPath = `${recordPath}.tmp`
   writeFileSync(temporaryPath, `${JSON.stringify({
     schemaVersion: 1,
     target: target.name,
-    version: dshVersion,
+    version,
     environment: update.environment,
+    tag: update.tag,
+    releaseType: update.releaseType,
     publicUrl: update.publicUrl,
   }, null, 2)}\n`)
   renameSync(temporaryPath, recordPath)
@@ -377,7 +374,16 @@ export async function packageTarget(
   } else {
     await execute(desktopElectronBuilderArguments(target, invocation.directory), electronBuilderEnv)
   }
-  if (!invocation.directory && !invocation.unsigned) writeReleaseRecord(target, electronBuilderEnv, buildPaths.artifacts)
+  if (!invocation.directory && !invocation.unsigned) {
+    const desktopVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
+    const dshVersion = packageVersion(join(REPOSITORY_ROOT, 'package.json'), 'dsh package')
+    if (desktopVersion !== dshVersion) {
+      throw new Error(`desktop package: desktop version ${desktopVersion} does not match dsh version ${dshVersion}`)
+    }
+    const update = resolveDesktopAutoUpdateConfig(electronBuilderEnv, target.platform, target.arch, desktopVersion)
+    await writeUpdateMetadata(buildPaths.artifacts, desktopVersion, target.name, update.metadataFilename)
+    writeReleaseRecord(target, buildPaths.artifacts, desktopVersion, update)
+  }
 }
 
 if (process.argv[1] !== undefined && import.meta.filename === resolve(process.argv[1])) await main()

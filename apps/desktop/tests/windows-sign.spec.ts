@@ -70,7 +70,7 @@ describe('Windows token signing', () => {
       await writeFile(signTool, 'fixture')
       await writeFile(path, 'fixture')
       validateDesktopPackageEnvironment({
-        DSH_DESKTOP_APP_ID: 'com.example.desktop', DOWNLOAD_TEST_ORIGIN: 'https://updates.example.com',
+        DSH_DESKTOP_APP_ID: 'com.example.desktop', DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
         DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
         DSH_DESKTOP_WINDOWS_CER_FILE: certificateFile, DSH_DESKTOP_WINDOWS_SIGNTOOL: signTool,
         DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'fixture-pin', DSH_DESKTOP_WINDOWS_KEY_CONTAINER: 'fixture-container',

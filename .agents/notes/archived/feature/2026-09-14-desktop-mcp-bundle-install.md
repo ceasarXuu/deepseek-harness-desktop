@@ -1,6 +1,7 @@
 # Agent Note: Install MCP bundles in the adopted Desktop application
 
 Status: implemented
+Archived: 2026-09-20
 
 English | [中文](2026-09-14-desktop-mcp-bundle-install.zh.md)
 

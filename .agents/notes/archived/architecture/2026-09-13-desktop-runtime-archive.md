@@ -1,6 +1,7 @@
 # Agent Note: Ship the Desktop runtime as one verified archive
 
 Status: implemented
+Archived: 2026-09-20
 
 English | [中文](2026-09-13-desktop-runtime-archive.zh.md)
 

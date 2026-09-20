@@ -108,20 +108,14 @@ describe('desktop package target', () => {
     })).toEqual({ DSH_DESKTOP_AUTO_UPDATE_ENV: 'production' })
   })
 
-  it('keeps COS credentials out of every packaging subprocess', () => {
+  it('keeps the upload token out of every packaging subprocess', () => {
     expect(withoutDesktopUploadCredentials({
-      DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com',
-      DOWNLOAD_TEST_COS_BUCKET: 'test-download-bucket',
-      DOWNLOAD_TEST_COS_SECRET_ID: 'test-id',
-      DOWNLOAD_TEST_COS_SECRET_KEY: 'test-key',
-      DOWNLOAD_PROD_COS_BUCKET: 'production-download-bucket',
-      DOWNLOAD_PROD_COS_SECRET_ID: 'production-id',
-      DOWNLOAD_PROD_COS_SECRET_KEY: 'production-key',
+      GH_TOKEN: 'workflow-token',
+      GITHUB_TOKEN: 'actions-token',
+      DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
       DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
     })).toEqual({
-      DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com',
-      DOWNLOAD_TEST_COS_BUCKET: 'test-download-bucket',
-      DOWNLOAD_PROD_COS_BUCKET: 'production-download-bucket',
+      DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
       DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
     })
   })

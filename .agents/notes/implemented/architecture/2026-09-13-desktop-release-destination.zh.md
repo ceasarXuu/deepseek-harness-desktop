@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-09-13-desktop-release-destination.md) | 中文
 
-消费该发布的应用程序是[采用的上游应用](2026-09-13-adopt-upstream-desktop.zh.md)；一次发布携带的内容是[运行时归档](2026-09-13-desktop-runtime-archive.zh.md)。
+消费该发布的应用程序是[采用的上游应用](2026-09-13-adopt-upstream-desktop.zh.md)；一次发布携带的内容是上游打包出的应用，[跟随上游的 Desktop 交付形态](2026-09-20-upstream-desktop-delivery-and-release-identity.zh.md)记录了这一点。
 
 ## 问题
 

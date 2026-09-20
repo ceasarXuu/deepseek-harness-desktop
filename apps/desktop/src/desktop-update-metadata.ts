@@ -1,38 +1,10 @@
-/** Write the updater configuration the application carries and the channel metadata a release publishes. */
+/** Write the channel metadata a release publishes. */
 
 import { createHash } from 'node:crypto'
 import { createReadStream, writeFileSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { dump } from 'js-yaml'
-
-/** Provider fields `app-update.yml` carries for one resolved destination. */
-export interface DesktopUpdateDestination {
-  readonly owner: string
-  readonly repo: string
-  readonly releaseType: 'release' | 'prerelease'
-}
-
-/**
- * Write `app-update.yml` into the packaged application's resources.
- *
- * electron-builder writes this file only in a pass that builds an installer target, and this
- * application's installers are built from an already packaged directory, so the packaging step
- * writes it where the updater looks for it.
- * @param resourcesDir - `Contents/Resources` (or `resources`) of the application being packaged.
- * @param destination - Resolved GitHub release destination.
- * @returns Absolute path of the written configuration.
- */
-export function writeAppUpdateConfiguration(resourcesDir: string, destination: DesktopUpdateDestination): string {
-  const path = join(resourcesDir, 'app-update.yml')
-  writeFileSync(path, dump({
-    provider: 'github',
-    owner: destination.owner,
-    repo: destination.repo,
-    releaseType: destination.releaseType,
-  }))
-  return path
-}
 
 /** One updater payload the channel metadata refers to. */
 export interface DesktopChannelArtifact {

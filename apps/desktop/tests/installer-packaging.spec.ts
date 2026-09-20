@@ -30,7 +30,7 @@ describe('installer preparation preserves application dependencies', () => {
       DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)',
       DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234',
       APPLE_KEYCHAIN_PROFILE: 'installer-test',
-      DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com',
+      DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
     }
     for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value)
     try {

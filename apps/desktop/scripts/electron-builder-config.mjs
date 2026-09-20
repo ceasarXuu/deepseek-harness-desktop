@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
@@ -25,6 +26,15 @@ import {
   verifyMacOSAppUpdateConfig,
   writeMacOSAppUpdateConfig,
 } from './macos-app-update-config.mjs'
+
+/** Read the version of the application being packaged, which names its release tag. */
+function desktopVersion() {
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  if (typeof manifest.version !== 'string' || manifest.version === '') {
+    throw new Error('desktop package: the application manifest has no version')
+  }
+  return manifest.version
+}
 
 /**
  * Create electron-builder configuration from one release environment.
@@ -73,7 +83,7 @@ export function createElectronBuilderConfig(
   if (windowsSigner !== undefined) {
     installWindowsNsisBootstrapSigner({ sign: windowsSigner })
   }
-  const update = unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
+  const update = unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch, desktopVersion())
   if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   return {
     appId,
@@ -119,7 +129,9 @@ export function createElectronBuilderConfig(
       { from: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)), to: 'icon.png' },
     ],
     mac: {
-      icon: fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
+      // The dark application icon lives in this fork's `desktop/build/icons` subtree, which kept
+      // the deleted fork shell's assets; upstream's configuration names its own PNG.
+      icon: fileURLToPath(new URL('../../desktop/build/icons/icon-dark.icns', import.meta.url)),
       category: 'public.app-category.developer-tools',
       identity: macOSSigning?.signingIdentity,
       forceCodeSigning: true,
@@ -199,6 +211,11 @@ export function createElectronBuilderConfig(
       differentialPackage: true,
     },
     detectUpdateChannel: false,
-    publish: update === undefined ? null : [{ provider: 'generic', url: update.publicUrl, channel: 'nightly' }],
+    publish: update === undefined ? null : [{
+      provider: 'github',
+      owner: update.owner,
+      repo: update.repo,
+      releaseType: update.releaseType,
+    }],
   }
 }

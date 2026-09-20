@@ -10,7 +10,7 @@ import {
 } from '../scripts/macos-app-update-config.mjs'
 
 const roots: string[] = []
-const update = { publicUrl: 'https://desktop-updates.example.com/dsh-desk/feeds/mac-arm64/' }
+const update = { owner: 'example', repo: 'desktop-releases', releaseType: 'prerelease' } as const
 
 async function fixture(): Promise<{ appPath: string; resourcesDir: string }> {
   const root = await mkdtemp(join(tmpdir(), 'desktop-macos-update-config-'))
@@ -26,21 +26,21 @@ afterEach(async () => {
 })
 
 describe('macOS packaged updater configuration', () => {
-  it('uses the final generic Nightly provider configured for the build', () => {
-    expect(resolveMacOSAppUpdateFeed([{ provider: 'generic', url: update.publicUrl, channel: 'nightly' }]))
-      .toEqual(update)
-    for (const publish of [undefined, [], [{ provider: 'github', channel: 'nightly', url: update.publicUrl }],
-      [{ provider: 'generic', channel: 'latest', url: update.publicUrl }]]) {
+  it('uses the GitHub release published for the build', () => {
+    expect(resolveMacOSAppUpdateFeed([{ provider: 'github', ...update }])).toEqual(update)
+    for (const publish of [undefined, [], [{ provider: 'generic', url: 'https://example.com/' }],
+      [{ provider: 'github', owner: 'example', repo: 'desktop-releases' }]]) {
       expect(() => resolveMacOSAppUpdateFeed(publish)).toThrow(/macOS update config/u)
     }
   })
 
-  it('writes and verifies the fixed release feed before signing', async () => {
+  it('writes and verifies the release repository before signing', async () => {
     const paths = await fixture()
     expect(createMacOSAppUpdateConfig(update, 'deepseek-harness-updater')).toEqual({
-      provider: 'generic',
-      url: update.publicUrl,
-      channel: 'nightly',
+      provider: 'github',
+      owner: 'example',
+      repo: 'desktop-releases',
+      releaseType: 'prerelease',
       updaterCacheDirName: 'deepseek-harness-updater',
     })
     await writeMacOSAppUpdateConfig(paths.resourcesDir, update, 'deepseek-harness-updater')
@@ -49,8 +49,9 @@ describe('macOS packaged updater configuration', () => {
 
   it.each([
     ['missing', undefined],
-    ['wrong feed', 'provider: generic\nurl: https://wrong.example.com/\nchannel: nightly\nupdaterCacheDirName: fixture\n'],
-    ['missing cache directory', `provider: generic\nurl: ${update.publicUrl}\nchannel: nightly\n`],
+    ['wrong repository', 'provider: github\nowner: other\nrepo: desktop-releases\nreleaseType: prerelease\nupdaterCacheDirName: fixture\n'],
+    ['wrong release type', 'provider: github\nowner: example\nrepo: desktop-releases\nreleaseType: release\nupdaterCacheDirName: fixture\n'],
+    ['missing cache directory', 'provider: github\nowner: example\nrepo: desktop-releases\nreleaseType: prerelease\n'],
   ] as const)('rejects %s updater configuration', async (_label, contents) => {
     const paths = await fixture()
     if (contents !== undefined) await writeFile(join(paths.resourcesDir, 'app-update.yml'), contents)

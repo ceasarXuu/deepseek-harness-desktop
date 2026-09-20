@@ -33,7 +33,7 @@ harness 启动的二进制通过两条杠杆中能够抵达它的那一条，拿
 
 **由依赖自行算出的路径，由启动器指明。** `node-pty` 依据自身在闭包中的模块位置推导 helper 路径，那里没有任何 harness 代码去解析它；唯一的杠杆是被打过补丁的加载器会优先读取的 `DSH_NODE_PTY_SPAWN_HELPER`（`patches/node-pty@1.2.0-beta.15.patch`），因此由 shell 在它启动的子进程上设置该变量，与它在那里已经陈述的其他安装事实（`DSH_HOME`、`DSH_DESKTOP_VERSION`）并列。该变量只在 unpacked helper 确实存在时设置，因为开发期运行从散文件闭包启动、路径本就是真实的，而在那里指向一个不存在的文件会让每个终端都像归档路径那样失败。
 
-产物本身不变。归档布局、归档的解包规则与运行时描述文件都维持原样，而[运行时归档](../architecture/2026-09-13-desktop-runtime-archive.zh.md)展开为真实目录，因此打包应用通过普通文件系统路径访问这两个二进制。今天在打包应用里两个杠杆都不会触发，并且已随运行时展开为真实目录而移除：`resolveRgPath()` 恢复为上游实现，node-pty 补丁已从 `patches/` 与 `pnpm-workspace.yaml` 删除，`rg-unpacked.spec.ts` 随规则一并删除。[采用决策](../architecture/2026-09-13-adopt-upstream-desktop.zh.md)记录了运行时位置的来源。
+产物本身不变。归档布局、归档的解包规则与运行时描述文件都维持原样，而运行时归档展开为真实目录，因此打包应用通过普通文件系统路径访问这两个二进制。今天在打包应用里两个杠杆都不会触发，并且已随运行时展开为真实目录而移除：`resolveRgPath()` 恢复为上游实现，node-pty 补丁已从 `patches/` 与 `pnpm-workspace.yaml` 删除，`rg-unpacked.spec.ts` 随规则一并删除。[采用决策](../architecture/2026-09-13-adopt-upstream-desktop.zh.md)记录了运行时位置的来源。
 
 ## 备选方案
 

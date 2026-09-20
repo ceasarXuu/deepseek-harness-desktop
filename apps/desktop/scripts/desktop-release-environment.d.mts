@@ -10,6 +10,7 @@ export const MACOS_TEAM_ID_ENV: 'DSH_DESKTOP_MACOS_TEAM_ID'
 /** Public identity expected on a macOS release. */
 export interface MacOSSigningEnvironment {
   readonly signingIdentity: string
+  readonly certificateName: string
   readonly teamId: string
 }
 

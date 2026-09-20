@@ -1,6 +1,10 @@
 import { writeFileSync } from 'node:fs'
 import { afterEach, expect, it, vi } from 'vitest'
 import { packageTarget, parseDesktopPackageInvocation } from '../scripts/package-target.ts'
+import { writeUpdateMetadata } from '../src/desktop-update-metadata.ts'
+
+// The channel metadata describes finished artifacts, which this suite does not build.
+vi.mock('../src/desktop-update-metadata.ts', () => ({ writeUpdateMetadata: vi.fn(async () => 'fixture-metadata') }))
 
 // Keep the real orchestration and manifest reads; this suite owns no release directories or subprocesses.
 vi.mock('node:fs', async importOriginal => ({
@@ -11,7 +15,7 @@ vi.mock('node:fs', async importOriginal => ({
 afterEach(() => { vi.unstubAllEnvs(); vi.clearAllMocks() })
 
 const environment = { DSH_DESKTOP_APP_ID: 'com.example.test', DSH_DESKTOP_AUTO_UPDATE_ENV: 'test',
-  DOWNLOAD_TEST_ORIGIN: 'https://updates.example.com', DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'fixture-pin' }
+  DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases', DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'fixture-pin' }
 
 function supervisor(failure?: string) {
   vi.stubEnv('npm_execpath', 'fixture-pnpm.cjs')
@@ -31,6 +35,7 @@ it('requires one signing preflight before building, then records only the comple
   expect(stages.filter(stage => stage === 'preflight:windows-signing')).toHaveLength(1)
   expect(run.run.mock.calls[0]![3]).toMatchObject({ env: { DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'fixture-pin' }, timeoutMs: 60_000 })
   expect(run.run.mock.calls[1]![3].env).not.toHaveProperty('DSH_DESKTOP_WINDOWS_TOKEN_PIN')
+  expect(writeUpdateMetadata).toHaveBeenCalledOnce()
   expect(writeFileSync).toHaveBeenCalledOnce()
 })
 

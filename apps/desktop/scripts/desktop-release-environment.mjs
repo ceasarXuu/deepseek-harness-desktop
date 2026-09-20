@@ -47,19 +47,23 @@ export function resolveDesktopAppId(env) {
 
 /**
  * Resolve and validate the public identity expected on a macOS release.
+ *
+ * The configured value is either the certificate qualifier or its full common name. A keychain that
+ * holds another certificate whose common name contains the qualifier makes the qualifier ambiguous
+ * to `codesign`, so the full common name is accepted and passed through to the signing commands.
  * @param {NodeJS.ProcessEnv} env - Packaging environment.
- * @returns {{ signingIdentity: string, teamId: string }} Expected certificate qualifier and Team ID.
+ * @returns {{ signingIdentity: string, certificateName: string, teamId: string }} Certificate qualifier, exact signing name, and Team ID.
  */
 export function resolveMacOSSigningEnvironment(env) {
-  const signingIdentity = requireEnvironmentValue(env, MACOS_SIGNING_IDENTITY_ENV)
-  if (signingIdentity.startsWith('Developer ID Application:')) {
-    throw new Error(`desktop release environment: ${MACOS_SIGNING_IDENTITY_ENV} must omit the "Developer ID Application:" prefix`)
-  }
+  const certificateName = requireEnvironmentValue(env, MACOS_SIGNING_IDENTITY_ENV)
+  const signingIdentity = certificateName.startsWith('Developer ID Application: ')
+    ? certificateName.slice('Developer ID Application: '.length)
+    : certificateName
   const teamId = requireEnvironmentValue(env, MACOS_TEAM_ID_ENV)
   if (!/^[A-Z0-9]{10}$/u.test(teamId)) {
     throw new Error(`desktop release environment: ${MACOS_TEAM_ID_ENV} must contain 10 uppercase letters or digits`)
   }
-  return { signingIdentity, teamId }
+  return { signingIdentity, certificateName, teamId }
 }
 
 /**

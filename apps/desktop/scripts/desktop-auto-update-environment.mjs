@@ -1,28 +1,32 @@
-/** Resolve the Desktop auto-update channel and its Tencent COS destination. */
+/** Resolve the Desktop update deployment and the GitHub release that serves it. */
 
-import { valid } from 'semver'
+import { prerelease, valid } from 'semver'
 
 /** Environment variable that selects the Desktop update deployment. */
 export const DESKTOP_AUTO_UPDATE_ENV = 'DSH_DESKTOP_AUTO_UPDATE_ENV'
 
+/** Environment variable that names the repository serving the test deployment. */
+export const DESKTOP_UPDATE_REPOSITORY_ENV = 'DSH_DESKTOP_UPDATE_REPOSITORY'
+
+/** Repository whose releases serve production updates. */
+const PRODUCTION_REPOSITORY = 'ceasarXuu/deepseek-harness-desktop'
+
 const UPDATE_ENVIRONMENTS = {
   test: {
-    originEnvName: 'DOWNLOAD_TEST_ORIGIN',
-    fixedOrigin: undefined,
-    bucketEnvName: 'DOWNLOAD_TEST_COS_BUCKET',
-    secretIdEnvName: 'DOWNLOAD_TEST_COS_SECRET_ID',
-    secretKeyEnvName: 'DOWNLOAD_TEST_COS_SECRET_KEY',
+    repositoryEnvName: DESKTOP_UPDATE_REPOSITORY_ENV,
+    fixedRepository: undefined,
   },
   production: {
-    originEnvName: undefined,
-    fixedOrigin: 'https://download.deepseek.com',
-    bucketEnvName: 'DOWNLOAD_PROD_COS_BUCKET',
-    secretIdEnvName: 'DOWNLOAD_PROD_COS_SECRET_ID',
-    secretKeyEnvName: 'DOWNLOAD_PROD_COS_SECRET_KEY',
+    repositoryEnvName: undefined,
+    fixedRepository: PRODUCTION_REPOSITORY,
   },
 }
 
 const UPDATE_TARGETS = new Set(['mac-arm64', 'mac-x64', 'win-x64'])
+const REPOSITORY_PART = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u
+
+/** Upload credentials this fork accepts, in the order a local run should provide them. */
+export const DESKTOP_UPLOAD_TOKEN_ENV_NAMES = ['GH_TOKEN', 'GITHUB_TOKEN']
 
 /**
  * Resolve the update deployment, defaulting local release work to test.
@@ -65,7 +69,10 @@ export function desktopBuildRecordFilename(target) {
 }
 
 /**
- * Return the electron-builder channel metadata filename for an application version.
+ * Return the channel metadata filename the updater reads for a version.
+ *
+ * The GitHub provider matches a prerelease channel by the version's own prerelease
+ * component, so `0.1.5-rc.2` reads `rc-mac.yml` and a stable version reads `latest-mac.yml`.
  * @param {string} version - Desktop semantic version.
  * @param {NodeJS.Platform} platform - Target platform.
  * @returns {string} Channel metadata filename emitted for the target.
@@ -77,91 +84,124 @@ export function desktopUpdateMetadataFilename(version, platform) {
   if (platform !== 'darwin' && platform !== 'win32') {
     throw new Error(`desktop auto-update: unsupported metadata platform ${platform}`)
   }
-  return `nightly${platform === 'darwin' ? '-mac' : ''}.yml`
+  const release = prerelease(version)
+  const channel = release === null ? 'latest' : String(release[0])
+  return `${channel}${platform === 'darwin' ? '-mac' : ''}.yml`
 }
 
 /**
- * Read one required release setting without accepting whitespace-only values.
- * @param {NodeJS.ProcessEnv} env - Packaging or upload environment.
- * @param {string} name - Environment variable to read.
- * @returns {string} Trimmed setting.
+ * Resolve the release tag one version publishes under.
+ *
+ * The updater's GitHub provider reads release tags as semantic versions and matches a
+ * prerelease channel by the version's own prerelease component, so the tag is the version
+ * with the conventional `v` prefix and no other decoration.
+ * @param {string} version - Desktop semantic version.
+ * @returns {string} Release tag serving that version.
  */
-function requiredEnvironmentValue(env, name) {
-  const value = env[name]?.trim()
+export function desktopReleaseTag(version) {
+  if (valid(version) === null) {
+    throw new Error(`desktop auto-update: invalid Desktop version ${JSON.stringify(version)}`)
+  }
+  return `v${version}`
+}
+
+/**
+ * Read one `owner/repository` pair without accepting whitespace or extra path segments.
+ * @param {string} value - Candidate repository.
+ * @param {string} label - Environment variable or constant the value came from.
+ * @returns {{ owner: string, repo: string }} Validated GitHub repository.
+ */
+function githubRepository(value, label) {
+  const parts = value.split('/')
+  if (parts.length !== 2 || !parts.every(part => REPOSITORY_PART.test(part))) {
+    throw new Error(`desktop auto-update: ${label} must be a GitHub owner/repository pair`)
+  }
+  return { owner: parts[0], repo: parts[1] }
+}
+
+/**
+ * Read the deployment repository without accepting whitespace-only values.
+ * @param {NodeJS.ProcessEnv} env - Packaging or upload environment.
+ * @param {{ repositoryEnvName: string | undefined, fixedRepository: string | undefined }} deployment - Selected deployment.
+ * @returns {{ owner: string, repo: string }} Repository serving this deployment.
+ */
+function deploymentRepository(env, deployment) {
+  if (deployment.fixedRepository !== undefined) {
+    return githubRepository(deployment.fixedRepository, 'the production repository')
+  }
+  const { repositoryEnvName } = deployment
+  if (repositoryEnvName === undefined) throw new Error('desktop auto-update: selected deployment has no repository')
+  const value = env[repositoryEnvName]?.trim()
   if (value === undefined || value === '') {
-    throw new Error(`desktop auto-update: ${name} must be set to a non-empty value`)
+    throw new Error(`desktop auto-update: ${repositoryEnvName} must be set to a non-empty value`)
   }
-  return value
+  return githubRepository(value, repositoryEnvName)
 }
 
 /**
- * Normalize an HTTPS origin and reject paths or credentials.
- * @param {string} value - Candidate origin.
- * @param {string} name - Environment variable used in diagnostics.
- * @returns {string} Normalized HTTPS origin without a trailing slash.
- */
-function httpsOrigin(value, name) {
-  let parsed
-  try {
-    parsed = new URL(value)
-  }
-  catch {
-    throw new Error(`desktop auto-update: ${name} must be an absolute HTTPS origin`)
-  }
-  if (parsed.protocol !== 'https:'
-    || parsed.username !== ''
-    || parsed.password !== ''
-    || parsed.pathname !== '/'
-    || parsed.search !== ''
-    || parsed.hash !== '') {
-    throw new Error(`desktop auto-update: ${name} must be an absolute HTTPS origin without a path, credentials, query, or fragment`)
-  }
-  return parsed.origin
-}
-
-/**
- * Resolve the public updater URL for one release target.
+ * Resolve the repository serving the selected deployment, without selecting a release.
+ *
+ * Configuration validation needs the destination to resolve but has no version to tag yet,
+ * so this reads only the deployment and its repository.
  * @param {NodeJS.ProcessEnv} env - Packaging or upload environment.
- * @param {NodeJS.Platform} platform - Target Node.js platform.
- * @param {string} arch - Target Node.js architecture.
- * @returns {{ environment: 'test' | 'production', target: 'mac-arm64' | 'mac-x64' | 'win-x64', origin: string, publicUrl: string, keyPrefix: string }} Resolved updater configuration.
- * @throws {Error} When the test deployment lacks a valid HTTPS origin.
+ * @returns {{ environment: 'test' | 'production', owner: string, repo: string }} Selected deployment and the repository serving it.
  */
-export function resolveDesktopAutoUpdateConfig(env, platform, arch) {
+export function resolveDesktopUpdateRepository(env) {
   const environment = resolveDesktopAutoUpdateEnvironment(env)
-  const target = resolveDesktopAutoUpdateTarget(platform, arch)
-  const deployment = UPDATE_ENVIRONMENTS[environment]
-  let origin = deployment.fixedOrigin
-  if (origin === undefined) {
-    const { originEnvName } = deployment
-    if (originEnvName === undefined) throw new Error('desktop auto-update: selected deployment has no origin')
-    origin = httpsOrigin(requiredEnvironmentValue(env, originEnvName), originEnvName)
+  return { environment, ...deploymentRepository(env, UPDATE_ENVIRONMENTS[environment]) }
+}
+
+/**
+ * Read the upload credential from the first environment variable that carries one.
+ * @param {NodeJS.ProcessEnv} env - Upload environment.
+ * @returns {string} Non-empty GitHub token.
+ */
+export function resolveDesktopUploadToken(env) {
+  for (const name of DESKTOP_UPLOAD_TOKEN_ENV_NAMES) {
+    const value = env[name]?.trim()
+    if (value !== undefined && value !== '') return value
   }
-  const keyPrefix = `dsh-desk/feeds/${target}`
+  throw new Error(`desktop upload: ${DESKTOP_UPLOAD_TOKEN_ENV_NAMES.join(' or ')} must be set to a non-empty value`)
+}
+
+/**
+ * Resolve the GitHub release one version publishes to, without selecting an architecture.
+ *
+ * A step that acts on the whole release (the merged macOS channel file is written for every
+ * architecture at once) has no single target directory, so this resolves only the deployment
+ * and the tag it publishes.
+ * @param {NodeJS.ProcessEnv} env - Release environment.
+ * @param {string} version - Desktop semantic version being released.
+ * @returns {{ environment: 'test' | 'production', owner: string, repo: string, tag: string, releaseType: 'release' | 'prerelease', publicUrl: string }} Resolved release destination.
+ */
+export function resolveDesktopReleaseDestination(env, version) {
+  const { environment, owner, repo } = resolveDesktopUpdateRepository(env)
+  const tag = desktopReleaseTag(version)
   return {
     environment,
-    target,
-    origin,
-    keyPrefix,
-    publicUrl: `${origin}/${keyPrefix}/`,
+    owner,
+    repo,
+    tag,
+    releaseType: prerelease(version) === null ? 'release' : 'prerelease',
+    publicUrl: `https://github.com/${owner}/${repo}/releases/download/${tag}/`,
   }
 }
 
 /**
- * Resolve the public updater URL and private COS destination for one upload target.
- * @param {NodeJS.ProcessEnv} env - Upload environment.
+ * Resolve the release destination for one target.
+ * @param {NodeJS.ProcessEnv} env - Packaging or upload environment.
  * @param {NodeJS.Platform} platform - Target Node.js platform.
  * @param {string} arch - Target Node.js architecture.
- * @returns {{ environment: 'test' | 'production', target: 'mac-arm64' | 'mac-x64' | 'win-x64', origin: string, publicUrl: string, keyPrefix: string, bucket: string, secretIdEnvName: string, secretKeyEnvName: string }} Resolved upload configuration.
- * @throws {Error} When the selected deployment lacks a required origin or bucket, or the test origin is not HTTPS.
+ * @param {string} version - Desktop semantic version being packaged.
+ * @returns {{ environment: 'test' | 'production', target: 'mac-arm64' | 'mac-x64' | 'win-x64', owner: string, repo: string, tag: string, releaseType: 'release' | 'prerelease', metadataFilename: string, publicUrl: string }} Resolved update destination.
+ * @throws {Error} When the selected deployment lacks a repository, or the version is not semantic.
  */
-export function resolveDesktopUploadConfig(env, platform, arch) {
-  const update = resolveDesktopAutoUpdateConfig(env, platform, arch)
-  const deployment = UPDATE_ENVIRONMENTS[update.environment]
+export function resolveDesktopAutoUpdateConfig(env, platform, arch, version) {
+  const target = resolveDesktopAutoUpdateTarget(platform, arch)
+  const metadataFilename = desktopUpdateMetadataFilename(version, platform)
   return {
-    ...update,
-    bucket: requiredEnvironmentValue(env, deployment.bucketEnvName),
-    secretIdEnvName: deployment.secretIdEnvName,
-    secretKeyEnvName: deployment.secretKeyEnvName,
+    ...resolveDesktopReleaseDestination(env, version),
+    target,
+    metadataFilename,
   }
 }

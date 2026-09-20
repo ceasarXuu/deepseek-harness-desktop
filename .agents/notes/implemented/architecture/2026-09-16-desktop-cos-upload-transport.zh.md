@@ -18,7 +18,7 @@ qualification 传输保持原有 store 接口与命名空间检查不变。它�
 
 ## 测试
 
-[cos-loopback.ts](../../../../apps/desktop/tests/cos-loopback.ts)把真实 SDK 实例 `before-send` 中的 URL 重定向到每个测试独立的 loopback 源，并记录实际收到的字节，因此测试观察的是传输的序列化结果，而不是它的 mock。[desktop-upload-run.spec.ts](../../../../apps/desktop/tests/desktop-upload-run.spec.ts)与[installed-update-cos.spec.ts](../../../../apps/desktop/tests/installed-update-cos.spec.ts)断言确切的请求体字节、`Content-Length`、`Content-MD5`、不存在传输编码与内容编码、已签名的 `x-cos-forbid-overwrite` 头、HTTP 500 与连接中断时每个对象只发一次请求、读取 404/403/截断的处理，以及保留记录不包含凭据与原始服务端消息。
+[cos-loopback.ts](../../../../apps/desktop/tests/cos-loopback.ts)把真实 SDK 实例 `before-send` 中的 URL 重定向到每个测试独立的 loopback 源，并记录实际收到的字节，因此测试观察的是传输的序列化结果，而不是它的 mock。[installed-update-cos.spec.ts](../../../../apps/desktop/tests/installed-update-cos.spec.ts)断言确切的请求体字节、`Content-Length`、`Content-MD5`、不存在传输编码与内容编码、已签名的 `x-cos-forbid-overwrite` 头、HTTP 500 与连接中断时每个对象只发一次请求、读取 404/403/截断的处理，以及保留记录不包含凭据与原始服务端消息。
 
 [cos-operation.spec.ts](../../../../apps/desktop/tests/cos-operation.spec.ts)验证跨重试的总截止时间、持续返回数据的响应流、未确认 PUT 的取消，以及关闭请求不影响其他操作。测试组合虚拟截止时间计时器与真实 socket 和流观测。
 

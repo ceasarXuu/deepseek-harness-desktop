@@ -5,7 +5,6 @@ import { load } from 'js-yaml'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   describeChannelArtifact,
-  writeAppUpdateConfiguration,
   writeMergedChannelMetadata,
   writeUpdateMetadata,
 } from '../src/desktop-update-metadata.ts'
@@ -20,24 +19,6 @@ async function root(): Promise<string> {
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map(async path => rm(path, { recursive: true, force: true })))
-})
-
-describe('the updater configuration', () => {
-  it('names the release repository the updater resolves releases from', async () => {
-    const resources = await root()
-    const path = writeAppUpdateConfiguration(resources, {
-      owner: 'example',
-      repo: 'desktop-releases',
-      releaseType: 'prerelease',
-    })
-    expect(path).toBe(join(resources, 'app-update.yml'))
-    expect(load(await readFile(path, 'utf8'))).toEqual({
-      provider: 'github',
-      owner: 'example',
-      repo: 'desktop-releases',
-      releaseType: 'prerelease',
-    })
-  })
 })
 
 describe('the channel metadata', () => {

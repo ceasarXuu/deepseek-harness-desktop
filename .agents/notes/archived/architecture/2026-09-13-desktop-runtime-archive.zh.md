@@ -1,6 +1,7 @@
 # Agent Note: 将 Desktop 运行时作为单个已验证归档分发
 
 Status: implemented
+Archived: 2026-09-20
 
 [English](2026-09-13-desktop-runtime-archive.md) | 中文
 

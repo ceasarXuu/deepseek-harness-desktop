@@ -1,13 +1,16 @@
-/** Upload one validated Desktop release to its Tencent COS update directory. */
+/** Upload one validated Desktop release to its GitHub release. */
 
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import type { DesktopPackageTargetName } from './package-target.ts'
-import { createDesktopCos } from './desktop-cos.ts'
-import { resolveDesktopUploadConfig } from './desktop-auto-update-environment.mjs'
+import { resolveDesktopUploadToken } from './desktop-auto-update-environment.mjs'
 import { loadDesktopPackageEnvironment } from './desktop-package-environment.mjs'
 import { createDesktopUploadPlan } from './desktop-upload-plan.ts'
-import { uploadDesktopRelease } from './desktop-upload-run.ts'
+import {
+  ensureRelease,
+  uploadReleaseAsset,
+  type GitHubReleaseClient,
+} from './github-release-client.ts'
 
 const SUPPORTED_TARGETS = new Set<DesktopPackageTargetName>(['mac-arm64', 'mac-x64', 'win-x64'])
 
@@ -18,78 +21,35 @@ function targetName(value: string): DesktopPackageTargetName {
   return value as DesktopPackageTargetName
 }
 
-function requiredEnvironmentValue(environment: NodeJS.ProcessEnv, name: string): string {
-  const value = environment[name]?.trim()
-  if (value === undefined || value === '') {
-    throw new Error(`desktop upload: ${name} must be set to a non-empty value`)
-  }
-  return value
-}
-
-/**
- * Use the credential launcher's selected deployment only when it matches the packaged release destination.
- * @param fileEnvironment Target dotenv settings that own the release destination.
- * @param injectedEnvironment Child environment containing the DPAPI-decrypted credential pair.
- * @param selected Deployment authorized by the launcher operator.
- * @param bucket Bucket authorized by the launcher operator.
- * @param target Packaged target being uploaded.
- * @returns Release settings with only the selected credential pair replaced.
- */
-export function resolveCredentialUploadEnvironment(
-  fileEnvironment: NodeJS.ProcessEnv, injectedEnvironment: NodeJS.ProcessEnv,
-  selected: 'test' | 'production', bucket: string,
-  target: DesktopPackageTargetName,
-): NodeJS.ProcessEnv {
-  const platform = target === 'win-x64' ? 'win32' : 'darwin'
-  const arch = target === 'mac-arm64' ? 'arm64' : 'x64'
-  const destination = resolveDesktopUploadConfig(fileEnvironment, platform, arch)
-  if (destination.environment !== selected || destination.bucket !== bucket) {
-    throw new Error('desktop upload: credential launcher deployment or bucket differs from the packaged release destination')
-  }
-  if (injectedEnvironment.DSH_DESKTOP_AUTO_UPDATE_ENV !== selected
-    || injectedEnvironment[`${selected === 'test' ? 'DOWNLOAD_TEST' : 'DOWNLOAD_PROD'}_COS_BUCKET`] !== bucket) {
-    throw new Error('desktop upload: credential launcher environment differs from its explicit arguments')
-  }
-  return {
-    ...fileEnvironment,
-    [destination.secretIdEnvName]: requiredEnvironmentValue(injectedEnvironment, destination.secretIdEnvName),
-    [destination.secretKeyEnvName]: requiredEnvironmentValue(injectedEnvironment, destination.secretKeyEnvName),
-  }
-}
-
 async function main(): Promise<void> {
-  const { positionals, values } = parseArgs({ args: process.argv.slice(2), allowPositionals: true, options: {
-    'credential-launcher': { type: 'boolean' }, environment: { type: 'string' }, bucket: { type: 'string' },
-  } })
+  const { positionals } = parseArgs({ args: process.argv.slice(2), allowPositionals: true })
   const target = positionals[0]
   if (target === undefined || positionals.length !== 1) {
     throw new Error('desktop upload: expected exactly one target')
   }
   const name = targetName(target)
-  const fileEnvironment = loadDesktopPackageEnvironment(name === 'win-x64' ? 'win32' : 'darwin')
-  const launcher = values['credential-launcher'] === true
-  if (launcher ? values.environment === undefined || values.bucket === undefined
-    : values.environment !== undefined || values.bucket !== undefined) {
-    throw new Error('desktop upload: credential launcher requires an explicit environment and bucket')
-  }
-  if (values.environment !== undefined && values.environment !== 'test' && values.environment !== 'production') {
-    throw new Error('desktop upload: credential launcher environment must be test or production')
-  }
-  const environment = launcher
-    ? resolveCredentialUploadEnvironment(fileEnvironment, process.env, values.environment as 'test' | 'production', values.bucket!, name)
-    : fileEnvironment
+  const environment = loadDesktopPackageEnvironment(name === 'win-x64' ? 'win32' : 'darwin')
   const plan = await createDesktopUploadPlan(name, { environment })
-  const cos = createDesktopCos({
-    secretId: requiredEnvironmentValue(environment, plan.secretIdEnvName),
-    secretKey: requiredEnvironmentValue(environment, plan.secretKeyEnvName),
-  })
+  const client: GitHubReleaseClient = {
+    token: resolveDesktopUploadToken(process.env),
+    owner: plan.owner,
+    repo: plan.repo,
+  }
   process.stdout.write(`desktop upload: ${plan.target} ${plan.version} -> ${plan.publicUrl}\n`)
-  await uploadDesktopRelease(plan, cos, resolve(import.meta.dirname, '../.desktop-build/upload-records'))
+  const release = await ensureRelease(client, plan.tag, plan.releaseType === 'prerelease')
+  for (const asset of plan.assets) {
+    await uploadReleaseAsset(client, release.id, {
+      path: asset.path,
+      filename: asset.filename,
+      contentType: asset.contentType,
+    })
+  }
 }
 
 if (process.argv[1] !== undefined && import.meta.filename === resolve(process.argv[1])) {
-  main().catch(() => {
-    process.stderr.write('desktop upload: failed; inspect the printed record directory if allocated. No automatic retry; reconcile remote state before another upload.\n')
+  main().catch((error: unknown) => {
+    process.stderr.write(`desktop upload: ${error instanceof Error ? error.message : String(error)}\n`)
+    process.stderr.write('desktop upload: no automatic retry; reconcile the release state before uploading again.\n')
     process.exitCode = 1
   })
 }

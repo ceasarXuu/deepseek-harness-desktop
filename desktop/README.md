@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 The desktop distribution of DeepSeek Harness: a signed, self-contained macOS application that runs the harness and its browser interface without a terminal, a system Node.js, or any separately started service.
 
-The application itself is upstream's — `apps/desktop` (Electron shell) and `apps/desktop-host` (private Host process). This subtree records what this fork changes around it, what it keeps from its own earlier implementation, and how a release is made. The [adoption decision](../.agents/notes/implemented/architecture/2026-09-13-adopt-upstream-desktop.md) owns why.
+The application is upstream's — `apps/desktop` (Electron shell) and `apps/desktop-host` (private Host process), with their composition, runtime layout, profile handling, plugin transactions, recovery actions, and update unit unchanged. This subtree owns where a release comes from: the GitHub release this fork publishes and the identity it is signed with. The [release destination decision](../.agents/notes/implemented/architecture/2026-09-13-desktop-release-destination.md) owns why.
 
 ## Relationship to the harness
 
@@ -18,50 +18,41 @@ The shell boots a private Host process from the runtime the application carries,
 
 This repository is a long-lived fork of `deepseek-ai/deepseek-harness`. Development happens here; upstream `master` is fetched only to take updates. Nothing developed for the desktop application is contributed back.
 
-That arrangement makes one property load-bearing: **the cost of pulling upstream is proportional to how many upstream-owned files this fork edits.** Every edited upstream file is a merge conflict at the next sync, so desktop work adds new files by preference and modifies existing ones only where the delivery or the release identity requires it.
+That arrangement makes one property load-bearing: **the cost of pulling upstream is proportional to how many upstream-owned files this fork edits.** Every edited upstream file is a merge conflict at the next sync, so desktop work adds new files by preference and modifies existing ones only where the release identity requires it. When upstream changes the delivery or the packaging path in a way that makes a fork edit unnecessary, the edit is dropped rather than carried forward.
 
 ### Upstream-owned files this fork edits
 
-Adding an entry to this table is a decision, not a side effect.
+Adding an entry to this table is a decision, not a side effect. Upstream's own [`apps/desktop/README.md`](../apps/desktop/README.md) documents the Tencent COS destination these edits replace; the packaging stages themselves are unchanged.
 
 | File | Edit | Why it cannot be avoided |
 |---|---|---|
-| [`apps/desktop/src/runtime-closure.ts`](../apps/desktop/src/runtime-closure.ts), [`apps/desktop/tests/runtime-closure.spec.ts`](../apps/desktop/tests/runtime-closure.spec.ts) | New module and tests: pack, digest, expand, and heal the runtime archive | This is the delivery format; upstream carries the tree as loose resources |
-| [`apps/desktop/src/main.ts`](../apps/desktop/src/main.ts) | Expand the archive into `$DSH_HOME/closure/<version>` before the backend starts, reporting progress | The runtime location upstream assumes is `resources/dsh`, which this fork does not ship |
-| [`apps/desktop/src/paths.ts`](../apps/desktop/src/paths.ts) | Add the closure root | The expansion directory is an Electron-owned path |
-| [`apps/desktop/src/backend-controller.ts`](../apps/desktop/src/backend-controller.ts) | Carry expansion progress in the `starting` backend state | The loading window renders it |
-| [`apps/desktop/renderer/startup.html`](../apps/desktop/renderer/startup.html), [`startup.js`](../apps/desktop/renderer/startup.js), [`startup.css`](../apps/desktop/renderer/startup.css), [`src/locale.ts`](../apps/desktop/src/locale.ts) | A determinate progress bar and its English and Chinese copy | The first launch expands eleven thousand files; an unlabelled spinner reads as a hang |
-| [`apps/desktop/scripts/prepare-dsh.ts`](../apps/desktop/scripts/prepare-dsh.ts) | Pack the verified tree and prove the archive expands back to it | The build must fail when what it packed is not what it verified |
-| [`apps/desktop/scripts/desktop-build-paths.mjs`](../apps/desktop/scripts/desktop-build-paths.mjs) (+ [`.d.mts`](../apps/desktop/scripts/desktop-build-paths.d.mts)) | Add the archive and digest paths | Each target owns its own archive |
-| [`apps/desktop/electron-builder.config.mjs`](../apps/desktop/electron-builder.config.mjs) (+ [`.d.mts`](../apps/desktop/electron-builder.config.d.mts)) | Carry the archive and its digest instead of the tree, verify them in `afterPack`/`afterSign`, and publish with the `github` provider | Resource mapping, build-time verification, and the release destination are configured here |
-| [`apps/desktop/electron-builder.config.mjs`](../apps/desktop/electron-builder.config.mjs) | Set `mac.icon` to [`desktop/build/icons/icon-dark.icns`](build/icons) | Packaging never set an icon, so macOS fell back to Electron's default; the icon lives in this subtree because the fork's deleted shell kept it here as an asset |
-| [`apps/desktop/scripts/desktop-auto-update-environment.mjs`](../apps/desktop/scripts/desktop-auto-update-environment.mjs) (+ [`.d.mts`](../apps/desktop/scripts/desktop-auto-update-environment.d.mts)) | Resolve a GitHub repository, release tag, and release type instead of a Tencent COS origin and bucket | This fork publishes to its own repository |
-| [`apps/desktop/scripts/desktop-upload-plan.ts`](../apps/desktop/scripts/desktop-upload-plan.ts), [`apps/desktop/scripts/upload-target.ts`](../apps/desktop/scripts/upload-target.ts) | Validate the same artifacts and upload them as GitHub release assets | The validated upload is the point; only the transport changes |
-| [`apps/desktop/src/desktop-update-metadata.ts`](../apps/desktop/src/desktop-update-metadata.ts), [`apps/desktop/tests/desktop-update-metadata.spec.ts`](../apps/desktop/tests/desktop-update-metadata.spec.ts) | New module and tests: write `app-update.yml` and the channel metadata | electron-builder writes them only in a pass that builds an installer target, and this application builds its installers from an already packaged directory |
-| [`apps/desktop/scripts/package-target.ts`](../apps/desktop/scripts/package-target.ts) | Record the tag and release type, and withhold `GH_TOKEN`/`GITHUB_TOKEN` from packaging subprocesses | The upload needs a record it can trust, and packaging needs no credential |
-| [`apps/desktop/scripts/desktop-release-environment.mjs`](../apps/desktop/scripts/desktop-release-environment.mjs) (+ [`.d.mts`](../apps/desktop/scripts/desktop-release-environment.d.mts)), [`verify-macos-signature.mjs`](../apps/desktop/scripts/verify-macos-signature.mjs), [`tests/macos-signature.spec.ts`](../apps/desktop/tests/macos-signature.spec.ts) | Accept a full certificate common name and derive the short one from it | Two certificates in this keychain share a short name, so name matching is ambiguous |
-| [`apps/desktop/tests/fixtures/runtime-payload-smoke.mjs`](../apps/desktop/tests/fixtures/runtime-payload-smoke.mjs) | Drop the `fs-ext` check | `@deepseek-ai/node-addon-system` replaced that dependency, so the file is absent from the closure |
-| [`apps/desktop/tests/main-startup.spec.ts`](../apps/desktop/tests/main-startup.spec.ts), [`startup-renderer.spec.ts`](../apps/desktop/tests/startup-renderer.spec.ts), [`macos-signature.spec.ts`](../apps/desktop/tests/macos-signature.spec.ts), [`desktop-build-paths.spec.ts`](../apps/desktop/tests/desktop-build-paths.spec.ts), [`desktop-auto-update-environment.spec.ts`](../apps/desktop/tests/desktop-auto-update-environment.spec.ts), [`desktop-upload-plan.spec.ts`](../apps/desktop/tests/desktop-upload-plan.spec.ts), [`package-target.spec.ts`](../apps/desktop/tests/package-target.spec.ts) | Track the behavior above | Tests describe the behavior this fork ships |
+| [`apps/desktop/scripts/desktop-auto-update-environment.mjs`](../apps/desktop/scripts/desktop-auto-update-environment.mjs) (+ [`.d.mts`](../apps/desktop/scripts/desktop-auto-update-environment.d.mts)) | Resolve a GitHub repository, release tag, and release type instead of a Tencent COS origin and bucket; derive the channel metadata filename from the version's prerelease component | This fork publishes to its own repository, and the updater's GitHub provider derives its channel from the version |
+| [`apps/desktop/scripts/desktop-package-environment.mjs`](../apps/desktop/scripts/desktop-package-environment.mjs) | Accept `DSH_DESKTOP_UPDATE_REPOSITORY` as a release setting | The test deployment names the repository it publishes to |
+| [`apps/desktop/scripts/desktop-upload-plan.ts`](../apps/desktop/scripts/desktop-upload-plan.ts), [`apps/desktop/scripts/upload-target.ts`](../apps/desktop/scripts/upload-target.ts) | Validate the same completion record, channel metadata, sizes, and digests, then upload GitHub release assets; a macOS lane uploads no channel metadata | The validated upload is the point; only the transport changes, and one release carries one merged macOS channel file |
+| [`apps/desktop/scripts/macos-app-update-config.mjs`](../apps/desktop/scripts/macos-app-update-config.mjs) (+ [`.d.mts`](../apps/desktop/scripts/macos-app-update-config.d.mts)) | Write and verify a `github` provider `app-update.yml` instead of a fixed generic feed | The packaged application reads its release repository from that file |
+| [`apps/desktop/scripts/electron-builder-config.mjs`](../apps/desktop/scripts/electron-builder-config.mjs) | Publish with the `github` provider, and name [`desktop/build/icons/icon-dark.icns`](build/icons) as the macOS icon | The release destination and the fork's application icon are configured here |
+| [`apps/desktop/scripts/package-macos.ts`](../apps/desktop/scripts/package-macos.ts) | Validate the channel file beside each lane's artifacts without promoting it | The merged channel file is assembled from the release by `finalize:mac:channel` |
+| [`apps/desktop/scripts/package-target.ts`](../apps/desktop/scripts/package-target.ts) | Record the tag and release type in the completion record, and withhold `GH_TOKEN`/`GITHUB_TOKEN` from packaging subprocesses | The upload needs a record it can trust, and packaging needs no credential |
+| [`apps/desktop/package.json`](../apps/desktop/package.json) | Add the `finalize:mac:channel` script | The release workflow calls it |
+| [`apps/desktop/scripts/desktop-release-environment.mjs`](../apps/desktop/scripts/desktop-release-environment.mjs) (+ [`.d.mts`](../apps/desktop/scripts/desktop-release-environment.d.mts)), [`verify-macos-signature.mjs`](../apps/desktop/scripts/verify-macos-signature.mjs) | Accept a full certificate common name and derive the short one from it | Two certificates in this keychain share a short name, so name matching is ambiguous |
+| [`apps/desktop/tests/desktop-auto-update-environment.spec.ts`](../apps/desktop/tests/desktop-auto-update-environment.spec.ts), [`desktop-upload-plan.spec.ts`](../apps/desktop/tests/desktop-upload-plan.spec.ts), [`macos-app-update-config.spec.ts`](../apps/desktop/tests/macos-app-update-config.spec.ts), [`macos-signature.spec.ts`](../apps/desktop/tests/macos-signature.spec.ts), [`package-macos.spec.ts`](../apps/desktop/tests/package-macos.spec.ts), [`package-target.spec.ts`](../apps/desktop/tests/package-target.spec.ts) | Track the behavior above | Tests describe the behavior this fork ships |
 
 Everything else this subtree needs is its own file: the release workflow, the Agent Notes, the historical release documentation, and this README.
-
-The rule that keeps the table short is that a fork change belongs in `apps/desktop` only where the delivery or the release identity requires it, and never in a harness package unless the platform itself demands it.
 
 ## Dormant assets
 
 | Path | State | Why it is kept |
 |---|---|---|
-| [`packages/plugin-store`](packages/plugin-store), [`packages/ui-plugin-store`](packages/ui-plugin-store) | Outside the workspace: neither builds nor runs | The capability they carried now ships as [`apps/desktop/src/mcp-bundles.ts`](../apps/desktop/src/mcp-bundles.ts) (install, registry, generated plugin) and the plugin window's MCP bundles section; the two packages remain only as the earlier implementation |
-| [`build/icons`](build/icons), [`build/entitlements.mac.plist`](build/entitlements.mac.plist) | The dark icon now serves macOS packaging; the remaining icons and the entitlements file are unused | Only [`icon-dark.icns`](build/icons) is referenced by the upstream config, so the light, clear, and generic icons stay dormant; upstream's configuration uses no entitlements file |
+| [`build/entitlements.mac.plist`](build/entitlements.mac.plist), the light, clear, and generic icons in [`build/icons`](build/icons) | Unused: only `icon-dark.icns` is named by the packaging configuration, and upstream's configuration uses no entitlements file | The fork's deleted shell kept its assets here |
 | [`docs/releases`](docs/releases/README.md) | Historical release plans | They record what each version intended |
 
 ## Tags and releases
 
-A release is tagged `v<version>` and published as a GitHub release in `ceasarXuu/deepseek-harness-desktop` by [the release workflow](../.github/workflows/desktop-release.yml). The tag is the version itself because the updater's GitHub provider compares release tags as semantic versions and derives the prerelease channel from the version's prerelease component. The `dsh-v*` prefix belongs to the upstream release train, whose tags arrive with every upstream fetch, so it cannot be shared. The [release destination decision](../.agents/notes/implemented/architecture/2026-09-13-desktop-release-destination.md) owns the feed, the credentials, and the upload validation.
+A release is tagged `v<version>` and published as a GitHub release in `ceasarXuu/deepseek-harness-desktop` by [the release workflow](../.github/workflows/desktop-release.yml). The tag is the version itself because the updater's GitHub provider compares release tags as semantic versions and derives the prerelease channel from the version's prerelease component, so `0.1.6-alpha.2` publishes `alpha-mac.yml` under tag `v0.1.6-alpha.2`, and a stable version publishes `latest-mac.yml`. The `dsh-v*` prefix belongs to the upstream release train, whose tags arrive with every upstream fetch, so it cannot be shared. The [release destination decision](../.agents/notes/implemented/architecture/2026-09-13-desktop-release-destination.md) owns the feed, the credentials, and the upload validation.
 
 ## Pre-release stance
 
-The repository's pre-release stance applies with full force here: with no external consumers of this fork, the correct foundation is preferred over compatibility shims, and on-disk formats may be revised rather than migrated. This is why the runtime archive carries no migration path for the format it is the first to write.
+The repository's pre-release stance applies with full force here: with no external consumers of this fork, the correct foundation is preferred over compatibility shims, and on-disk formats may be revised rather than migrated.
 
 ## Local toolchain
 
@@ -75,7 +66,7 @@ The remedy is to place a JavaScript pnpm at the pinned version ahead of the bina
 
 ## Building locally
 
-Three levels of cost, for three kinds of change.
+Two levels of cost, for two kinds of change.
 
 **Run from the source tree.** The shell and the harness both run from what the workspace built, so interface work needs no packaging:
 
@@ -92,18 +83,18 @@ pnpm run package:desktop:mac:arm64:dir
 ditto "apps/desktop/.desktop-build/targets/mac-arm64/artifacts/mac-arm64/DeepSeek Harness.app" "/Applications/DeepSeek Harness.app"
 ```
 
-Use this to check what the packaged application actually does — the first-launch expansion, Resources paths, crash handling — none of which the source-tree run reproduces. Updates are not testable here: the updater reads the release feed, and a `--dir` build carries no installer to update from.
+Use this to check what the packaged application actually does — Resources paths, the bundled runtime, crash handling — none of which the source-tree run reproduces. Updates are not testable here: the updater reads the release feed, and a `--dir` build carries no installer to update from.
 
-**Build the deliverable.** The release commands produce the signed and notarized DMG and ZIP, and the upload publishes them:
+**Build the deliverable.** Every package command requires signing and notarization credentials, which CI holds as secrets, so a release is built by the workflow rather than on a workstation:
 
 ```sh
 pnpm run package:desktop:mac:arm64   # or package:desktop:mac:x64
 GH_TOKEN=$(gh auth token) pnpm run upload:mac:arm64
 ```
 
-Every package command runs the official build, packs the first-party production closures, prepares the target Node.js and pnpm runtime, materializes and verifies the dsh tree, packs it into `desktop-runtime.tar.zst` with its digest, and expands that archive to prove it reproduces the tree. The application resources carry the archive, its digest, and the Node.js and pnpm runtime.
+A package command prepares the target runtime, materializes and verifies the dsh tree, builds the application, and produces the DMG, ZIP, and their blockmap together with the version's channel metadata. Packaging reads `apps/desktop/.env.macos`, whose release settings never fall back to the shell environment; [its template](../apps/desktop/.env.macos.example) lists every accepted setting. Signing and notarization perform the Apple-side checks the request needs.
 
-The signing and notarization environment, the update destination, and the upload credentials are documented in the [app README](../apps/desktop/README.md).
+The release workflow writes that file from its secrets, packages both macOS targets, verifies signature, Gatekeeper, and the stapled ticket on the artifact it just produced, uploads the binaries, and publishes the merged channel file last. A Windows release stays out of reach: signing needs a SafeNet token attached to a self-hosted runner, so that lane builds an unsigned installer as a workflow artifact and touches no release.
 
 ## Releases
 

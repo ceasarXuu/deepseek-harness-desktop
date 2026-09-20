@@ -1,6 +1,7 @@
 # Agent Note: 桌面端的恢复、更新与诊断
 
 Status: implemented
+Archived: 2026-09-20
 
 [English](2026-09-14-desktop-experience-surfaces.md) | 中文
 

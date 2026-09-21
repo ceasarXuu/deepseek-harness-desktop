@@ -48,14 +48,16 @@ export function resolveDesktopAppId(env) {
 /**
  * Read the signing certificate's exact common name from a configured identity.
  *
- * The configured value is either the certificate qualifier or its full common name. A keychain that
- * holds another certificate whose common name contains the qualifier makes the qualifier ambiguous
- * to `codesign`, so the full common name is accepted and every signing command names that.
+ * The configured value is either the certificate qualifier or its full common name, and a CI secret
+ * may carry surrounding whitespace. A keychain that holds another certificate whose common name
+ * contains the qualifier makes the qualifier ambiguous to `codesign`, so every signing command names
+ * the full common name through this one normalizer.
  * @param {string} value - Configured certificate qualifier or common name.
  * @returns {string} Common name to sign with.
  */
 export function macOSCertificateName(value) {
-  return value.startsWith('Developer ID Application: ') ? value : `Developer ID Application: ${value}`
+  const name = value.trim()
+  return name.startsWith('Developer ID Application: ') ? name : `Developer ID Application: ${name}`
 }
 
 /**

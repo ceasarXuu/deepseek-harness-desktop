@@ -36,7 +36,11 @@ describe('temporary macOS signing identity', () => {
     expect(action).toHaveBeenCalledTimes(stage === 'build' ? 1 : 0)
   })
 
-  it.each(['Example (TEAMID1234)', 'Developer ID Application: Example (TEAMID1234)'])('probes with the exact certificate common name %s', async (identity) => {
+  it.each([
+    'Example (TEAMID1234)',
+    'Developer ID Application: Example (TEAMID1234)',
+    ' Developer ID Application: Example (TEAMID1234) ',
+  ])('probes with the exact certificate common name %s', async (identity) => {
     const run = vi.fn<(command: string, args: string[]) => void>()
     await withMacOSSigningKeychain({ ...environment, DSH_DESKTOP_MACOS_SIGNING_IDENTITY: identity }, async () => {}, run)
     const probe = run.mock.calls.find(([command, args]) => command === '/usr/bin/codesign' && args[0] === '--force')![1]

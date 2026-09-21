@@ -6,11 +6,11 @@
  * Abrupt process termination requires the CI runner to clean its temporary directory.
  * @param environment Validated platform configuration with local CSC_LINK and CSC_KEY_PASSWORD.
  * @param action All signing work, settled before cleanup.
- * @param run Apple command executor.
+ * @param run Apple command executor; `revealOutput` is set only for a command whose arguments carry no secret.
  * @returns Resolves after work and cleanup; rejects on setup, work, or cleanup failure.
  */
 export function withMacOSSigningKeychain(
   environment: NodeJS.ProcessEnv,
   action: (environment: NodeJS.ProcessEnv) => Promise<void>,
-  run?: (command: string, args: string[]) => void,
+  run?: (command: string, args: string[], options?: { readonly revealOutput?: boolean }) => void,
 ): Promise<void>

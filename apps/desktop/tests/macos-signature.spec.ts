@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { NotarizeOptions } from '@electron/notarize'
 import {
@@ -76,6 +76,9 @@ describe('desktop macOS release signature', () => {
         writeUpdateInfo: false,
       },
     })
+    // electron-builder falls back to its default icon when this path is wrong, without failing.
+    expect(config.mac.icon).toContain('desktop/build/icons/icon-dark.icns')
+    expect(existsSync(config.mac.icon)).toBe(true)
     expect(config.publish).toEqual([{
       provider: 'github',
       owner: 'example',

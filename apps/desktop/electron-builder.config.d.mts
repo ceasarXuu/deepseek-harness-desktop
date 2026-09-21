@@ -19,6 +19,7 @@ export interface DesktopElectronBuilderConfig {
     { readonly from: string, readonly to: 'icon.png' },
   ]
   readonly mac: {
+    readonly icon: string
     readonly identity: string | undefined
     readonly forceCodeSigning: boolean
     readonly notarize: boolean
@@ -47,7 +48,12 @@ export interface DesktopElectronBuilderConfig {
   readonly beforeBuild: () => Promise<boolean>
   readonly beforePack: (context: { readonly appOutDir: string }) => Promise<void>
   readonly artifactBuildCompleted: (artifact: { readonly file: string }) => Promise<void> | undefined
-  readonly publish: readonly [{ readonly provider: 'generic', readonly url: string }] | null
+  readonly publish: readonly [{
+    readonly provider: 'github'
+    readonly owner: string
+    readonly repo: string
+    readonly releaseType: 'release' | 'prerelease'
+  }] | null
 }
 
 /**

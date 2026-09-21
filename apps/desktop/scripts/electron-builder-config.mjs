@@ -131,7 +131,7 @@ export function createElectronBuilderConfig(
     mac: {
       // The dark application icon lives in this fork's `desktop/build/icons` subtree, which kept
       // the deleted fork shell's assets; upstream's configuration names its own PNG.
-      icon: fileURLToPath(new URL('../../desktop/build/icons/icon-dark.icns', import.meta.url)),
+      icon: fileURLToPath(new URL('../../../desktop/build/icons/icon-dark.icns', import.meta.url)),
       category: 'public.app-category.developer-tools',
       identity: macOSSigning?.signingIdentity,
       forceCodeSigning: true,

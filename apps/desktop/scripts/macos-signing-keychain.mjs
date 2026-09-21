@@ -11,10 +11,10 @@ import { macOSCertificateName } from './desktop-release-environment.mjs'
  * @param {string} command Absolute executable path.
  * @param {string[]} args Command arguments, potentially containing secrets.
  * @param {{ revealOutput?: boolean }} [options] Set `revealOutput` only for a command whose arguments carry no secret.
- * @returns {void}
+ * @returns {string} Trimmed standard output of the command.
  */
 function execute(command, args, options = {}) {
-  try { execFileSync(command, args, { stdio: 'pipe', timeout: 120_000 }) }
+  try { return String(execFileSync(command, args, { stdio: 'pipe', encoding: 'utf8', timeout: 120_000 })).trim() }
   catch (error) {
     // execFile errors contain the command line, including private-key passwords.
     const detail = options.revealOutput === true && error instanceof Error && 'stderr' in error
@@ -25,20 +25,16 @@ function execute(command, args, options = {}) {
 }
 
 /**
- * List the code-signing identities an owned keychain holds, for a diagnosable setup failure.
- * @param {string} keychain Absolute path of the keychain just populated.
- * @returns {string} `security` output, or the reason it could not be read.
+ * Parse the identities `security find-identity` lists for one keychain.
+ * @param {string} listing - `security find-identity -v -p codesigning` output.
+ * @returns {{ hash: string, name: string }[]} Identities in listing order.
  */
-function keychainIdentities(keychain) {
-  try {
-    return execFileSync('/usr/bin/security', ['find-identity', '-v', '-p', 'codesigning', keychain], {
-      encoding: 'utf8',
-      timeout: 120_000,
-    }).trim()
-  }
-  catch (error) {
-    return `unreadable: ${error instanceof Error ? error.message : String(error)}`
-  }
+export function parseSigningIdentities(listing) {
+  return listing.split('\n').flatMap((line) => {
+    const match = /^\s*\d+\)\s(?<hash>[0-9A-F]{40})\s"(?<name>.*)"\s*$/u.exec(line)
+    const { hash, name } = match?.groups ?? {}
+    return hash === undefined || name === undefined ? [] : [{ hash, name }]
+  })
 }
 
 /**
@@ -69,11 +65,19 @@ export async function withMacOSSigningKeychain(environment, action, run = execut
     security(['set-keychain-settings', keychain])
     security(['import', certificate, '-k', keychain, '-P', exportPassword, '-T', '/usr/bin/codesign', '-T', '/usr/bin/productbuild'])
     security(['set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password, keychain])
+    const listing = security(['find-identity', '-v', '-p', 'codesigning', keychain])
+    const identities = parseSigningIdentities(typeof listing === 'string' ? listing : '')
+    const identity = identities[0]
+    if (identities.length !== 1 || identity === undefined) {
+      throw new Error(`desktop macOS signing: the imported keychain holds ${identities.length} code-signing identities; exactly one is required`)
+    }
+    const certificateName = macOSCertificateName(configuredIdentity)
+    // The packaging signer names this certificate by its hash, so a configured name that differs from
+    // the certificate's own by invisible characters is reported here rather than failing the probe.
+    process.stdout.write(`desktop macOS signing: imported ${identity.hash}; configured name ${certificateName.length} characters, certificate name ${identity.name.length} characters, equal: ${String(identity.name === certificateName)}\n`)
     const probe = join(directory, 'probe')
     run('/bin/cp', ['/usr/bin/true', probe])
-    // A rejected probe reports only that codesign failed, so record what the keychain holds.
-    process.stdout.write(`desktop macOS signing: imported identities\n${keychainIdentities(keychain)}\n`)
-    run('/usr/bin/codesign', ['--force', '--sign', macOSCertificateName(configuredIdentity), '--keychain', keychain, '--timestamp', '--options', 'runtime', probe], { revealOutput: true })
+    run('/usr/bin/codesign', ['--force', '--sign', identity.hash, '--keychain', keychain, '--timestamp', '--options', 'runtime', probe], { revealOutput: true })
     run('/usr/bin/codesign', ['--verify', '--strict', probe], { revealOutput: true })
     const childEnvironment = { ...environment, CSC_KEYCHAIN: keychain }
     delete childEnvironment.CSC_LINK

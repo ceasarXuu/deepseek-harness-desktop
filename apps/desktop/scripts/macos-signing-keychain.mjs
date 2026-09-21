@@ -38,6 +38,18 @@ export function parseSigningIdentities(listing) {
 }
 
 /**
+ * Read the keychain paths `security list-keychains` prints, without their surrounding quotes.
+ * @param {string} listing - `security list-keychains -d user` output.
+ * @returns {string[]} Keychain paths in listing order.
+ */
+function userKeychainPaths(listing) {
+  return listing.split('\n').flatMap((line) => {
+    const path = line.trim().replace(/^"|"$/gu, '')
+    return path === '' ? [] : [path]
+  })
+}
+
+/**
  * Import and authorize the required p12 before work; delete the owned keychain after work settles.
  * Children receive only its path, never the p12 password. Existing login keychains are not unlocked.
  * Abrupt process termination requires the CI runner to clean its temporary directory.
@@ -58,6 +70,7 @@ export async function withMacOSSigningKeychain(environment, action, run = execut
   /** @param {string[]} args Security command arguments. */
   const security = args => run('/usr/bin/security', args)
   let created = false
+  let searchList = []
   try {
     security(['create-keychain', '-p', password, keychain])
     created = true
@@ -65,6 +78,10 @@ export async function withMacOSSigningKeychain(environment, action, run = execut
     security(['set-keychain-settings', keychain])
     security(['import', certificate, '-k', keychain, '-P', exportPassword, '-T', '/usr/bin/codesign', '-T', '/usr/bin/productbuild'])
     security(['set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password, keychain])
+    // `codesign` resolves a signing identity through the user search list; `--keychain` only narrows
+    // it, so an owned keychain that is absent from the list names no identity at all.
+    searchList = userKeychainPaths(security(['list-keychains', '-d', 'user']))
+    security(['list-keychains', '-d', 'user', '-s', keychain, ...searchList])
     const listing = security(['find-identity', '-v', '-p', 'codesigning', keychain])
     const identities = parseSigningIdentities(typeof listing === 'string' ? listing : '')
     const identity = identities[0]
@@ -84,7 +101,10 @@ export async function withMacOSSigningKeychain(environment, action, run = execut
     delete childEnvironment.CSC_KEY_PASSWORD
     await action(childEnvironment)
   } finally {
-    try { if (created) security(['delete-keychain', keychain]) }
+    try {
+      if (searchList.length !== 0) security(['list-keychains', '-d', 'user', '-s', ...searchList])
+      if (created) security(['delete-keychain', keychain])
+    }
     finally { rmSync(directory, { recursive: true, force: true }) }
   }
 }

@@ -8,15 +8,18 @@ const OTHER_HASH = 'BA991F5FAF431B710373A65218EA860A7E21138C'
 const CERTIFICATE_NAME = 'Developer ID Application: Example (TEAMID1234)'
 const environment = { CSC_LINK: '/signing.p12', CSC_KEY_PASSWORD: 'export-secret', DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example (TEAMID1234)' }
 
+const LISTED_KEYCHAIN = '/Users/fixture/Library/Keychains/login.keychain-db'
+
 function listing(identities: readonly { hash: string; name: string }[]): string {
   return `${identities.map((entry, index) => `  ${index + 1}) ${entry.hash} "${entry.name}"`).join('\n')}\n     ${identities.length} valid identities found\n`
 }
 
-/** Executor whose owned keychain reports the given identities. */
+/** Executor whose owned keychain reports the given identities and one pre-existing keychain. */
 function executor(identities: readonly { hash: string; name: string }[] = [{ hash: HASH, name: CERTIFICATE_NAME }], failAt?: string) {
   return vi.fn((command: string, args: string[]) => {
     if (failAt !== undefined && args[0] === failAt) throw Error('tool failure')
     if (command === '/usr/bin/security' && args[0] === 'find-identity') return listing(identities)
+    if (command === '/usr/bin/security' && args[0] === 'list-keychains') return `    "${LISTED_KEYCHAIN}"\n`
     return ''
   })
 }
@@ -40,6 +43,10 @@ describe('temporary macOS signing identity', () => {
     const partition = run.mock.calls.find(([, args]) => args[0] === 'set-partition-list' || args[0] === 'set-key-partition-list')![1]
     expect(partition[partition.indexOf('-k') + 1]).toBe(create[2])
     expect(create[2]).not.toBe(environment.CSC_KEY_PASSWORD)
+    const searchListWrites = run.mock.calls
+      .filter(([command, args]) => command === '/usr/bin/security' && args[0] === 'list-keychains' && args.includes('-s'))
+    expect(searchListWrites[0]?.[1]).toEqual(['list-keychains', '-d', 'user', '-s', keychain, LISTED_KEYCHAIN])
+    expect(searchListWrites.at(-1)?.[1]).toEqual(['list-keychains', '-d', 'user', '-s', LISTED_KEYCHAIN])
   })
 
   it.each([

@@ -22,7 +22,7 @@ Status: implemented
 
 **丢弃，不再携带。** `apps/desktop/src/runtime-closure.ts` 及其测试；`apps/desktop/src/mcp-bundles.ts`、其测试与 fixture；`apps/desktop/src/diagnostics.ts` 及其测试。其中两个界面早已失去落脚点——上游删除了 `renderer/plugin-manager.*` 与 `renderer/startup.*`，而那正是本 fork 挂载它们的位置——因此继续携带就意味着要对着上游的 Web UI 重建它们，而不是直接交付。休眠的 `desktop/packages/plugin-store` 与 `desktop/packages/ui-plugin-store` 一并删除，因为它们所记录的能力已不再在本仓库任何地方表达。
 
-**保留，因为本 fork 仍然拥有。** 发布目标：`ceasarXuu/deepseek-harness-desktop` 中的 GitHub release；一份指明该仓库与发布类型的 `app-update.yml`；对 DMG、ZIP 与 blockmap 的带校验上传；以及一个把两个架构的 ZIP 合并为单份 `<channel>-mac.yml` 的 finalize 步骤，因为一次 release 只携带一份频道文件。上游发布到腾讯 COS 并使用本 fork 不持有的凭据，所以这是唯一无法丢弃的差异。macOS 证书仍可按完整通用名提供，因为本钥匙串中有两张共用短名的证书。深色应用图标仍由打包配置指定；上游现在自带图标，因此这一项是品牌选择，而不是在填补空缺。
+**保留，因为本 fork 仍然拥有。** 发布目标：`ceasarXuu/deepseek-harness-desktop` 中的 GitHub release；一份指明该仓库与发布类型的 `app-update.yml`；对 DMG、ZIP 与 blockmap 的带校验上传；以及一个把两个架构的 ZIP 合并为单份 `<channel>-mac.yml` 的 finalize 步骤，因为一次 release 只携带一份频道文件。上游发布到腾讯 COS 并使用本 fork 不持有的凭据，所以这是唯一无法丢弃的差异。macOS 证书仍可按完整通用名提供，因为本钥匙串中有两张共用短名的证书。深色应用图标仍由打包配置指定；上游现在自带图标，因此这一项是品牌选择，而不是在填补空缺。应用名为 `WhaleMaid Harness`，因为它与官方构建并装，而两个 bundle 不能共用同一个名字；同理，它在上游的 `dsh://` 之外注册自己的 `whalemaid://` 深链，因为另一个构建可能占用前者。账号登录不受影响：登录流程回到应用自己的回环 HTTP 源，而不是某个 URL scheme。
 
 **移入发布 workflow。** 发布设置通过 `apps/desktop/.env.macos` 到达打包流程，由 workflow 在打包前从其 secret 写出。workflow 不再自行把签名证书导入钥匙串：打包命令会用 `CSC_LINK` 创建临时钥匙串，并在运行结束时删除。
 

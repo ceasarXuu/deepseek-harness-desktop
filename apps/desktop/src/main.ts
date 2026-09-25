@@ -874,7 +874,7 @@ async function main(): Promise<void> {
   const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.png')
     : join(process.resourcesPath, 'icon.png')
   app.setAboutPanelOptions({
-    applicationName: 'DeepSeek Harness',
+    applicationName: 'WhaleMaid Harness',
     applicationVersion: app.getVersion(),
     // The release has no separate build number; omit Electron's bundle version.
     version: '',
@@ -1169,10 +1169,15 @@ async function main(): Promise<void> {
     window.focus()
   }
 
-  if (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === '1') app.setAsDefaultProtocolClient('dsh')
+  // `dsh` is upstream's deep link and may be claimed by another installed build of this
+  // application; the fork's own scheme keeps its window reachable either way.
+  const deepLinkSchemes = ['dsh', 'whalemaid']
+  if (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === '1') {
+    for (const scheme of deepLinkSchemes) app.setAsDefaultProtocolClient(scheme)
+  }
   app.on('open-url', (event, url) => {
     event.preventDefault()
-    if (url === 'dsh://open' || url === 'dsh://open/') focusPrimaryWindow()
+    if (deepLinkSchemes.some(scheme => url === `${scheme}://open` || url === `${scheme}://open/`)) focusPrimaryWindow()
   })
 
   app.on('activate', (_event, hasVisibleWindows) => {

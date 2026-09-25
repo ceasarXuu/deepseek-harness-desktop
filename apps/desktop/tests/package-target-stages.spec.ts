@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { afterEach, expect, it, vi } from 'vitest'
 import { packageTarget, parseDesktopPackageInvocation } from '../scripts/package-target.ts'
 import { writeUpdateMetadata } from '../src/desktop-update-metadata.ts'
@@ -70,8 +70,9 @@ it('requires one signing preflight before building, then records only the comple
   expect(writeUpdateMetadata).toHaveBeenCalledOnce()
   expect(writeFileSync).toHaveBeenCalledOnce()
   const record = JSON.parse(vi.mocked(writeFileSync).mock.calls[0]![1] as string) as { publicUrl: string; tag: string }
-  expect(record.tag).toBe('v0.1.7-rc.2')
-  expect(record.publicUrl).toBe('https://github.com/example/desktop-releases/releases/download/v0.1.7-rc.2/')
+  const releaseTag = `v${(JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as { version: string }).version}`
+  expect(record.tag).toBe(releaseTag)
+  expect(record.publicUrl).toBe(`https://github.com/example/desktop-releases/releases/download/${releaseTag}/`)
 })
 
 it('initializes shared storage only after acquiring the preflight stage lock', async () => {

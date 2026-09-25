@@ -14,7 +14,7 @@ const expected = {
   certificateName: 'Developer ID Application: Example Company (TEAMID1234)',
   teamId: 'TEAMID1234',
 }
-const appPath = '/private build/DeepSeek Harness.app'
+const appPath = '/private build/WhaleMaid Harness.app'
 const commands = [
   ['/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath]],
   ['/usr/bin/codesign', ['--display', '--verbose=4', appPath]],

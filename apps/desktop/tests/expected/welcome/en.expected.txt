@@ -1,6 +1,6 @@
-DeepSeek Harness
-DeepSeek Harness
-Welcome to DeepSeek Harness
+WhaleMaid Harness
+WhaleMaid Harness
+Welcome to WhaleMaid Harness
 Build potential. Explore intelligence.
 Sign in
 Add API Key

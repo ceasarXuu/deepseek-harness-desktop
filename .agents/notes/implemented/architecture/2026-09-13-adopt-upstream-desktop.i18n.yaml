@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-13-adopt-upstream-desktop.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-13-adopt-upstream-desktop.md
-2026-09-13-adopt-upstream-desktop.md: 850d7a0fbe48b620e9e8e8dcf294bff35e09eca6
-2026-09-13-adopt-upstream-desktop.zh.md: af580b8f92a85496c29dfbaf6dcb47b50dafd4a2
+/agent-note-adopt-the-upstream-desktop-application:
+  en: e11bd5dfc37689e0
+  zh: 27072da23876c51e
+/agent-note-adopt-the-upstream-desktop-application/problem:
+  en: b9d68e54dbfdb8d8
+  zh: 0fb2bc420ded58c0
+/agent-note-adopt-the-upstream-desktop-application/decision:
+  en: 9a75bb6ac535b03a
+  zh: 60c0b3e26704b098
+/agent-note-adopt-the-upstream-desktop-application/patch-surface:
+  en: 1b455db24e350420
+  zh: c3e6235c6c307b26
+/agent-note-adopt-the-upstream-desktop-application/alternatives-considered:
+  en: 88678085612902fa
+  zh: 5015e5a8a7f9faec
+/agent-note-adopt-the-upstream-desktop-application/consequences:
+  en: cc7fc4a0d31a3f56
+  zh: 58255a36d135d0b5

@@ -15,6 +15,7 @@ import {
 const RELEASE_ENVIRONMENT = {
   DSH_DESKTOP_APP_ID: 'com.example.desktop',
   DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
+  DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
   DSH_DESKTOP_TARGET_PLATFORM: 'darwin',
   DSH_DESKTOP_TARGET_ARCH: 'arm64',
   DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)',
@@ -22,7 +23,7 @@ const RELEASE_ENVIRONMENT = {
   APPLE_API_KEY: '/private/credentials/AuthKey_TEST123456.p8',
   APPLE_API_KEY_ID: 'TEST123456',
   APPLE_API_ISSUER: '11111111-2222-3333-4444-555555555555',
-  DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
+  DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases', DOWNLOAD_TEST_RELEASE_ID: '0123456789abcdef0123456789abcdef',
 }
 
 function portablePath(value: string): string {
@@ -47,7 +48,9 @@ describe('desktop macOS release signature', () => {
   it('loads release identifiers from the environment and requires code signing', async () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     const config = createElectronBuilderConfig(RELEASE_ENVIRONMENT, 'darwin', 'arm64')
+    expect(config.protocols).toEqual([{ name: 'DeepSeek Harness', schemes: ['dsh'] }])
     expect(portablePath(config.directories.output)).toContain('/.desktop-build/targets/mac-arm64/artifacts')
+    expect(config.mac.extendInfo.NSMicrophoneUsageDescription).toContain('microphone')
     expect(config.extraResources).toHaveLength(2)
     expect(config.extraResources[0]?.to).toBe('runtime')
     expect(portablePath(config.extraResources[0]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/runtime')
@@ -61,7 +64,7 @@ describe('desktop macOS release signature', () => {
     expect(dshNodeModules.to).toBe('dsh/node_modules')
     expect(config.asarUnpack).toEqual(expect.arrayContaining([
       '**/*.{node,dylib,dll,so,exe}',
-      '**/@vscode/ripgrep/bin/rg',
+      '**/@vscode/ripgrep-*/bin/rg',
     ]))
     expect(config).toMatchObject({
       appId: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
@@ -76,7 +79,7 @@ describe('desktop macOS release signature', () => {
         writeUpdateInfo: false,
       },
     })
-    // electron-builder falls back to its default icon when this path is wrong, without failing.
+    // electron-builder falls back to its own default icon when this path is wrong, without failing.
     expect(config.mac.icon).toContain('desktop/build/icons/icon-dark.icns')
     expect(existsSync(config.mac.icon)).toBe(true)
     expect(config.publish).toEqual([{
@@ -108,6 +111,7 @@ describe('desktop macOS release signature', () => {
     expect(() => createElectronBuilderConfig({
       DSH_DESKTOP_APP_ID: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
       DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
+      DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
       DSH_DESKTOP_TARGET_PLATFORM: 'win32',
     }, 'win32')).toThrow(/DSH_DESKTOP_WINDOWS_CER_FILE/u)
   })
@@ -117,6 +121,7 @@ describe('desktop macOS release signature', () => {
     const config = createElectronBuilderConfig({
       DSH_DESKTOP_APP_ID: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
       DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
+      DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
       DSH_DESKTOP_TARGET_PLATFORM: 'win32',
       DSH_DESKTOP_UNSIGNED: '1',
     }, 'win32', 'x64')

@@ -17,7 +17,7 @@ const environment = {
   DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)',
   DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234',
   APPLE_KEYCHAIN_PROFILE: 'fixture-profile',
-  DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases',
+  DSH_DESKTOP_UPDATE_REPOSITORY: 'example/desktop-releases', DOWNLOAD_TEST_RELEASE_ID: '0123456789abcdef0123456789abcdef',
 }
 const destination = { owner: 'example', repo: 'desktop-releases', releaseType: 'prerelease' } as const
 

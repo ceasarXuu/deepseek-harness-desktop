@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-13-spawnable-packaged-binary-paths.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-13-spawnable-packaged-binary-paths.md
-2026-09-13-spawnable-packaged-binary-paths.md: 70c26db376f3809cba942644ec65416794e43f2d
-2026-09-13-spawnable-packaged-binary-paths.zh.md: 9f37466146973e197008bf430f170320715a30f5
+/agent-note-a-spawnable-path-for-binaries-the-packaged-harness-launches:
+  en: a4bb4e10f8979be5
+  zh: e05d4733d429b0d8
+/agent-note-a-spawnable-path-for-binaries-the-packaged-harness-launches/problem:
+  en: 697178ad0dbc82d5
+  zh: 7b45c6e0d612bc3d
+/agent-note-a-spawnable-path-for-binaries-the-packaged-harness-launches/decision:
+  en: 9f962ad3c9698dc8
+  zh: ad3f616bf3b59deb
+/agent-note-a-spawnable-path-for-binaries-the-packaged-harness-launches/alternatives-considered:
+  en: f4eea7a98aba6f5e
+  zh: 54d9098a92973dd0
+/agent-note-a-spawnable-path-for-binaries-the-packaged-harness-launches/consequences:
+  en: a2d3d3731e91d267
+  zh: f0658cd9a92c9f17
+/agent-note-a-spawnable-path-for-binaries-the-packaged-harness-launches/testing:
+  en: 969a94c3ad58b7ad
+  zh: 40c2fe7998cf13cc

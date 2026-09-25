@@ -1,6 +1,34 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-11-fork-ci-and-desktop-release-configuration.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-09-11-fork-ci-and-desktop-release-configuration.md
-2026-09-11-fork-ci-and-desktop-release-configuration.md: 65f7466ee9045205d10ddbb9c9919d317a04dc33
-2026-09-11-fork-ci-and-desktop-release-configuration.zh.md: 0bb215007547193594ec91ee9444d1317e7ffe2f
+/agent-note-fork-ci-and-desktop-release-configuration:
+  en: d6f666cd34d81029
+  zh: 6237d726c3171751
+/agent-note-fork-ci-and-desktop-release-configuration/problem:
+  en: f22029f1f8b48729
+  zh: 8d37af16a4dab7ec
+/agent-note-fork-ci-and-desktop-release-configuration/decision:
+  en: a15c7c13f167e5ac
+  zh: a15c7c13f167e5ac
+/agent-note-fork-ci-and-desktop-release-configuration/decision/the-fork-owns-its-checks:
+  en: d301eddb75fce162
+  zh: 9f6114e6f64326d3
+/agent-note-fork-ci-and-desktop-release-configuration/decision/inherited-workflows-are-disabled-through-settings-not-by-editing:
+  en: 47964360ecf60ba1
+  zh: 425e6fc6d57f91f4
+/agent-note-fork-ci-and-desktop-release-configuration/decision/the-release-environment-is-created-before-the-release-workflow:
+  en: 49759061e47a1e58
+  zh: c0c741c81dd5534c
+/agent-note-fork-ci-and-desktop-release-configuration/decision/pnpm-must-be-a-javascript-entry-point:
+  en: 5ec11b1cfab09778
+  zh: 59e64448dafdfb41
+/agent-note-fork-ci-and-desktop-release-configuration/conditions-the-fork-s-first-run-surfaced:
+  en: 141c5b13676eb011
+  zh: 44deb53e07fdeda8
+/agent-note-fork-ci-and-desktop-release-configuration/alternatives-considered:
+  en: 40c1af30101e9294
+  zh: 395b4bdf2e613d01
+/agent-note-fork-ci-and-desktop-release-configuration/consequences:
+  en: 83bcf1d8c141423d
+  zh: bc18892d5b306904

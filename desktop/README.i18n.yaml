@@ -1,6 +1,34 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write desktop/README.md
-README.md: 93a00abc2dc0a6e96dbe35af538720cff05e6e9b
-README.zh.md: e0cd0e227c683d3f840c9c38766567bcd3d58237
+/deepseek-harness-desktop:
+  en: e8f1449a6dfc8978
+  zh: 91bf3f44e8ecf984
+/deepseek-harness-desktop/relationship-to-the-harness:
+  en: e6e915b697192cd4
+  zh: 0a37e457f30a068c
+/deepseek-harness-desktop/development-model:
+  en: d39790af3d11dce4
+  zh: 0d8ab6e2416780ef
+/deepseek-harness-desktop/development-model/upstream-owned-files-this-fork-edits:
+  en: b5e5510387ef7525
+  zh: d2adc9ec4ba423fe
+/deepseek-harness-desktop/dormant-assets:
+  en: a1341ec17693fb9a
+  zh: b5d6cc87c1b71624
+/deepseek-harness-desktop/tags-and-releases:
+  en: ea3b7d03d5849b6b
+  zh: f85ee0b8ec0cf7e6
+/deepseek-harness-desktop/pre-release-stance:
+  en: 46a69849661ac3ea
+  zh: 516c3bba3dd6f54e
+/deepseek-harness-desktop/local-toolchain:
+  en: a54183509b2f4bef
+  zh: 24087139855ec9fb
+/deepseek-harness-desktop/building-locally:
+  en: ff1d79d2280d4f8d
+  zh: b013b0a111e51c2a
+/deepseek-harness-desktop/releases:
+  en: 22ff8f3db1bc3a68
+  zh: dee8c2ddfd2aeaf8

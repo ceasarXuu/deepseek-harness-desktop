@@ -1,6 +1,37 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-13-runtime-plugin-bundles.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-13-runtime-plugin-bundles.md
-2026-09-13-runtime-plugin-bundles.md: 6b67eda0aa9e610b375fd4b2c81d0c6e045f7b15
-2026-09-13-runtime-plugin-bundles.zh.md: fab9a2c621ad8c0bb01429e9b093089c48e6a005
+/agent-note-runtime-plugin-bundles-in-the-desktop-application:
+  en: f575cadb6e945a9f
+  zh: 6848df911b800c3e
+/agent-note-runtime-plugin-bundles-in-the-desktop-application/problem:
+  en: cd7e1c73e120abcc
+  zh: 1567dcb87a8a67d7
+/agent-note-runtime-plugin-bundles-in-the-desktop-application/decision:
+  en: a15c7c13f167e5ac
+  zh: 63bcc2ef60c2f344
+/agent-note-runtime-plugin-bundles-in-the-desktop-application/decision/a-plugin-is-a-self-contained-bundle-installed-outside-the-application:
+  en: d61b410b22abd1a9
+  zh: df89b6d2b15b4224
+/agent-note-runtime-plugin-bundles-in-the-desktop-application/decision/the-host-supplies-the-runtime:
+  en: 0bf8d95b96f0b710
+  zh: f7c43f8253a1e357
+/agent-note-runtime-plugin-bundles-in-the-desktop-application/decision/one-enabled-plugin-is-one-mounted-mcp-client-instance:
+  en: ae756fe92dca8198
+  zh: 07e3d5f86735d4bf
+/agent-note-runtime-plugin-bundles-in-the-desktop-application/decision/failure-is-contained-twice:
+  en: 9beccc83aded3b07
+  zh: 490a1141113ce998
+/agent-note-runtime-plugin-bundles-in-the-desktop-application/decision/the-interface-reaches-the-store-over-its-own-loopback-routes:
+  en: 6969e7a96a2a9454
+  zh: f32127435b67bfde
+/agent-note-runtime-plugin-bundles-in-the-desktop-application/alternatives-considered:
+  en: 0c50dc03af6a89c7
+  zh: 1edfeed206cc5189
+/agent-note-runtime-plugin-bundles-in-the-desktop-application/consequences:
+  en: dbafbecc6545c2bb
+  zh: 33a71fd645e77b6d
+/agent-note-runtime-plugin-bundles-in-the-desktop-application/testing:
+  en: 1fcf9bce10844206
+  zh: 45e54d5835b20e45

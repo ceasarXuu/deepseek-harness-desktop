@@ -5,10 +5,11 @@
 import { z } from 'zod'
 import { lastAssistantStreamChunk, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-llm-retry/types'
-import { SessionSeq } from '@deepseek-ai/dsh-session'
+import { isSurfaceEvent, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { ContextPressureProjection, TokenUsageProjection } from './projection.ts'
+import { estimateMessage } from './estimate.ts'
 import { foldSurfaceProjection } from './surface-projection.ts'
 
 const zeroBuckets = (): TokenUsageProjection => ({
@@ -85,18 +86,53 @@ function usageOf(event: SessionEvent): TokenUsage | undefined {
   return lastAssistantStreamChunk(event.data.stream, 'usage')?.usage
 }
 
+const regeneratingContext = z.object({
+  seq: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).transform(SessionSeq),
+  tokens: z.number().int().nonnegative(),
+  pending: z.boolean(),
+}).strict()
+
 /** The context-pressure state schema and source of its inferred type. */
 const contextPressureStateSchema = z.object({
   contextWindow: z.number().int().positive().optional(),
   pressureTokens: z.number().int().nonnegative().optional(),
   surfaceTokens: z.number().int().nonnegative(),
   sampledSurfaceTokens: z.number().int().nonnegative().optional(),
+  runtimeContext: regeneratingContext.optional(),
+  skillCatalog: regeneratingContext.optional(),
   claim: z.object({
     start: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).transform(SessionSeq),
     end: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).transform(SessionSeq),
     tokens: z.number().int().nonnegative(),
   }).optional(),
 }).strict()
+
+/** Keep the previous price until a shadowed producer publishes its fresh context. */
+function regeneratedContext(
+  state: ContextPressureState,
+  event: SessionEvent,
+  consumedShadowPrice: boolean,
+): Pick<ContextPressureState, 'runtimeContext' | 'skillCatalog'> | undefined {
+  if (!isSurfaceEvent(event) || event.type !== 'user/message') return undefined
+  if (event.surfaceOp === 'append') {
+    const kind: string = event.data.source.kind
+    if (kind !== 'runtime-context' && kind !== 'skill-catalog') return undefined
+    const key = kind === 'runtime-context' ? 'runtimeContext' : 'skillCatalog'
+    return { [key]: { seq: event.seq, tokens: estimateMessage(event.data), pending: false } }
+  }
+  if (!consumedShadowPrice || event.surfaceOp.op !== 'replace') return undefined
+  const shadowed = (entry: ContextPressureState['runtimeContext']) =>
+    entry !== undefined && !entry.pending && event.sourceEventSeqs?.includes(entry.seq) === true
+      ? { ...entry, pending: true }
+      : entry
+  const runtimeContext = shadowed(state.runtimeContext)
+  const skillCatalog = shadowed(state.skillCatalog)
+  if (runtimeContext === state.runtimeContext && skillCatalog === state.skillCatalog) return undefined
+  return {
+    ...runtimeContext === undefined ? {} : { runtimeContext },
+    ...skillCatalog === undefined ? {} : { skillCatalog },
+  }
+}
 
 /** Host fold state for provider pressure and surface adjustments. */
 export type ContextPressureState = z.infer<typeof contextPressureStateSchema>
@@ -166,7 +202,7 @@ export const tokenUsageProjectionDefinition = {
  */
 export const contextPressureProjectionDefinition = {
   key: 'contextPressure',
-  stateVersion: 5,
+  stateVersion: 6,
   stateSchema: contextPressureStateSchema,
   init: () => ({ surfaceTokens: 0 }),
   apply: (state, event) => {
@@ -193,6 +229,8 @@ export const contextPressureProjectionDefinition = {
     if (fold.deltaTokens !== 0) {
       next = { ...next, surfaceTokens: next.surfaceTokens + fold.deltaTokens }
     }
+    const regenerated = regeneratedContext(next, event, state.claim !== undefined)
+    if (regenerated !== undefined) next = { ...next, ...regenerated }
     // A defined fold.claim is always freshly built, so presence decides claim
     // bookkeeping: no claim before or after this event leaves `next` as is.
     if (state.claim === undefined && fold.claim === undefined) return next
@@ -201,12 +239,14 @@ export const contextPressureProjectionDefinition = {
   },
   wire: {
     viewSchema: pressureSchema,
-    view: ({ contextWindow, pressureTokens, surfaceTokens, sampledSurfaceTokens }) => ({
+    view: ({ contextWindow, pressureTokens, surfaceTokens, sampledSurfaceTokens, runtimeContext, skillCatalog }) => ({
       ...contextWindow === undefined ? {} : { contextWindow },
       ...pressureTokens === undefined ? {} : { pressureTokens },
       ...pressureTokens === undefined || sampledSurfaceTokens === undefined
         ? {}
-        : { projectedTokens: Math.max(0, pressureTokens + surfaceTokens - sampledSurfaceTokens) },
+        : { projectedTokens: Math.max(0, pressureTokens + surfaceTokens - sampledSurfaceTokens
+          + (runtimeContext?.pending ? runtimeContext.tokens : 0)
+          + (skillCatalog?.pending ? skillCatalog.tokens : 0)) },
     }),
     summary: false,
   },

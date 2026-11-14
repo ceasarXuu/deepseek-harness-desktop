@@ -462,6 +462,8 @@ export interface LlmResolvedModelInfo extends LlmModelInfo {
   systemPromptUpdate?: SystemPromptUpdate
   /** Declared mid-conversation tool declaration handling; absent means every request declares the complete tool list. */
   toolUpdate?: ToolUpdate
+  /** The official Codex route supports loading discovered tools mid-conversation. */
+  codexToolSearch?: true
 }
 
 /**

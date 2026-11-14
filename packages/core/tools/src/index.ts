@@ -7,6 +7,7 @@ import { ToolExecutorUnavailableError } from './executor.ts'
 import type { ToolExecutor, ToolBatchInput, ToolBatchResult } from './executor.ts'
 import './events.ts'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
+import { createToolSearch, discoveredTools } from './discovery.ts'
 import { projectToolSchema } from './schema.ts'
 import { assertSupportedJsonSchema } from './json-schema.ts'
 import { RUN_CODE_NAME, ToolActivationError } from './contracts.ts'
@@ -45,6 +46,7 @@ interface CompiledToolRestriction {
 interface ToolRegistration {
   readonly definition: ToolDefinition
   readonly when: ToolRegistrationOptions['when']
+  readonly discoverable: boolean
 }
 
 /** One scope's complete registry view, derived in a single layer traversal. */
@@ -106,10 +108,12 @@ export class ToolsService extends Service {
   private readonly layers = new ScopedLayers(scope => new ToolLayer(scope), () => { this.ctx.emit('tools/change') })
   private readonly scoped = new WeakMap<ScopeKey, Registration>()
   private root: Registration | undefined
+  private readonly search = createToolSearch(agent => this.discoveryCandidates(this.view(agent)))
   private readonly guards = new ScopedLayers(() => new GuardLayer(), () => {})
 
   constructor(ctx: Context) {
     super(ctx, 'tools')
+    this.register(this.search, { when: () => true })
     ctx.systemPrompt.tools(({ scope, toolSet }) => {
       const executor = this.selectExecutor(scope)
       const description = executor.describe(this.definitions(scope, toolSet))
@@ -147,7 +151,7 @@ export class ToolsService extends Service {
     }
     return this.layers.effect(
       this.ctx,
-      layer => layer.tools.insert(name, { definition, when: options.when }),
+      layer => layer.tools.insert(name, { definition, when: options.when, discoverable: options.discoverable === true }),
       { label: 'tools.register()' },
     )
   }
@@ -254,6 +258,13 @@ export class ToolsService extends Service {
     return view.registrations.get(name)?.when === undefined ? view.visible.get(name) : undefined
   }
 
+  private discoveryCandidates(view: ToolView): ToolDefinition[] {
+    return [...view.visible.values()].filter((tool) => {
+      const registration = view.registrations.get(tool.name)
+      return registration?.discoverable === true && registration.when === undefined
+    })
+  }
+
   /**
    * Resolve conditions once for this step without changing shared registrations.
    * Cancellation or a rejected condition publishes no partial selection. Removed
@@ -265,9 +276,20 @@ export class ToolsService extends Service {
     const { agent, signal } = context
     signal.throwIfAborted()
     const view = this.view(agent)
+    const { provider, model } = context.modelSelection
+    const llm = this.ctx.get('llm')
+    const searchVisible = view.visible.get(this.search.name) === this.search
+    const hasCandidates = this.discoveryCandidates(view).length > 0
+    const discover = provider === 'openai-codex' && llm !== undefined && searchVisible && hasCandidates
+      && this.selectExecutor(agent).supportsToolDiscovery === true
+      && (await llm.resolveModelInfo(provider, model, signal)).codexToolSearch === true
+    signal.throwIfAborted()
+    const discovered = discover ? discoveredTools(context) : undefined
     const admitted = new Map<string, ToolDefinition>()
     for (const [name, definition] of view.visible) {
       const registration = view.registrations.get(name)
+      if (definition === this.search && !discover) continue
+      if (registration?.discoverable && registration.when === undefined && discovered !== undefined && !discovered.has(name)) continue
       let enabled: boolean
       try {
         enabled = registration?.when === undefined || await registration.when(context)
@@ -303,7 +325,9 @@ export class ToolsService extends Service {
    * @returns definitions after scoped shadowing and restrictions, limited to the step's admission when given.
    */
   definitions(scope?: ScopeKey, toolSet?: ResolvedToolSet): readonly ToolDefinition[] {
-    return toolSet === undefined ? [...this.view(scope).visible.values()] : [...toolSet.view(scope).values()]
+    return toolSet === undefined
+      ? [...this.view(scope).visible.values()].filter(tool => tool !== this.search)
+      : [...toolSet.view(scope).values()]
   }
 
   /**

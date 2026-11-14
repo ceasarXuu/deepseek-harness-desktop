@@ -854,6 +854,7 @@ export class LlmRuntime extends TypertRemoteService {
       ...defaultMaxTokens === undefined ? {} : { defaultMaxTokens },
       ...resolved.systemPromptUpdate === undefined ? {} : { systemPromptUpdate: resolved.systemPromptUpdate },
       ...resolved.toolUpdate === undefined ? {} : { toolUpdate: resolved.toolUpdate },
+      ...resolved.codexToolSearch === true ? { codexToolSearch: true } : {},
     }
     const reasoning = resolved.reasoning
     if (reasoning === undefined) return info

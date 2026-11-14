@@ -6,6 +6,7 @@ import { ToolExecutionPipeline, executeToolBatch } from '@deepseek-ai/dsh-tools/
 
 /** Executes visible capabilities directly and owns their complete batch settlement. */
 export class NativeToolExecutor implements ToolExecutor {
+  readonly supportsToolDiscovery = true
   private readonly pipeline: ToolExecutionPipeline
 
   constructor(ctx: Context, private readonly maxParallel: () => number = () => 10) {

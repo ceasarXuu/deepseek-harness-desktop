@@ -174,7 +174,7 @@ export async function syncTools(
   const disposers: ToolDisposers = new Map()
   try {
     for (const [publicName, definition] of definitions) {
-      disposers.set(publicName, ctx.tools.register(definition))
+      disposers.set(publicName, ctx.tools.register(definition, { discoverable: true }))
     }
   } catch (error) {
     // A conflict on an `mcp__<serverName>__`-qualified name means a foreign

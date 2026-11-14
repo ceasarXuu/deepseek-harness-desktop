@@ -5,11 +5,13 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-mcp-client
 
-English | [中文](README.zh.md)
+On official Codex routes whose model declares tool-search support, the native executor offers MCP tools through `tool_search`. Search exposes matching tools on the next step. Built-in tools remain directly callable, and the matched tools use the same execution checks as eagerly loaded tools.
 
 ## Summary
 
 `dsh-mcp-client` lets the model use tools and resources from external Model Context Protocol (MCP) servers. Configure one server per entry; its tools use names such as `mcp__github__create_issue`. No server is enabled by default. Shipped profiles already provide [shared resource discovery and reading](../mcp-resources/README.md). An empty caller scope adds no MCP tools or prompt text. Server instructions join the logged system prompt as literal text; MCP prompt templates are unsupported. Slow or crashed servers can delay startup or fail calls until recovery.
+
+
 
 ## Table of Contents
 

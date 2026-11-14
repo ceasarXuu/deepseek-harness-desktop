@@ -380,6 +380,7 @@ export class PiAiAdapter extends LlmAdapter {
     // Only a cap the deployment configured is a request default; the
     // catalog's `maxTokens` sizes the model and stops there.
     const configuredMaxTokens = profile.configuredMaxTokens.get(model)
+    const compat = resolvedModel.compat
     return {
       provider,
       id: model,
@@ -389,6 +390,9 @@ export class PiAiAdapter extends LlmAdapter {
       ...configuredMaxTokens === undefined ? {} : { defaultMaxTokens: configuredMaxTokens },
       ...reasoningInfo(resolvedModel, defaultLevel),
       ...conversationUpdates(resolvedModel),
+      ...provider === 'openai-codex' && resolvedModel.api === 'openai-codex-responses'
+        && resolvedModel.baseUrl.replace(/\/$/, '') === 'https://chatgpt.com/backend-api'
+        && compat !== undefined && 'supportsToolSearch' in compat && compat.supportsToolSearch === true ? { codexToolSearch: true } : {},
     }
   }
 

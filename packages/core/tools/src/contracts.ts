@@ -114,6 +114,8 @@ export interface ToolActivationContext {
 
 /** Lifecycle-owned conditions for a registered tool. */
 export interface ToolRegistrationOptions {
+  /** Offer this tool through on-demand discovery on supported native routes. */
+  readonly discoverable?: true
   /**
    * Decide whether the step's requests may call the tool. Omission enables
    * it. False excludes it from both declarations and dispatch; rejection fails

@@ -5,11 +5,13 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-mcp-client
 
-[English](README.md) | 中文
+使用原生工具执行器时，声明支持工具搜索的官方 Codex 路由通过 `tool_search` 按需加载 MCP 工具。命中的工具在下一步可用，内置工具直接可用，MCP 工具仍通过现有执行权限检查。
 
 ## 概述
 
 `dsh-mcp-client` 让模型使用外部 MCP（Model Context Protocol）服务器的工具与资源。每台服务器配置一条记录；其工具使用 `mcp__github__create_issue` 这样的名称。默认不启用任何服务器。随附 profile 已提供[共享资源发现与读取](../mcp-resources/README.zh.md)。调用方作用域为空时，不添加 MCP 工具或提示词文本。服务器指令作为字面文本加入已记录的系统提示词；MCP 提示词模板不受支持。缓慢或崩溃的服务器可能延迟启动，或让调用失败直至恢复。
+
+
 
 ## 目录
 

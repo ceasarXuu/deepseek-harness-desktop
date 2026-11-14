@@ -62,6 +62,8 @@ export interface ToolBatchResult {
 
 /** A plugin owns argument parsing, dispatch, scheduling, cancellation, and logging. */
 export interface ToolExecutor {
+  /** Whether the executor directly exposes individually discovered schemas. */
+  readonly supportsToolDiscovery?: true
   /** Guidance registered and disposed with this executor; absent means no executor-owned sections. */
   readonly sections?: readonly ToolPromptSection[]
   /**

@@ -295,7 +295,7 @@ export class ReactLoopAgent implements Agent {
     if (selection === undefined) {
       throw new Error(`agent "${this.id}" has no provider/model: set AgentOptions.provider and AgentOptions.model or record a model selection`)
     }
-    const toolSet = await this.loopCtx.tools.resolve({ agent: this, modelSelection: selection, signal })
+    const toolSet = await this.loopCtx.tools.resolve({ agent: this, modelSelection: selection, messages: claimed, signal })
     try {
       const assembly = await this.loopCtx.systemPrompt.assemble({ ...assembleContextFor(this, signal), modelSelection: selection, toolSet })
       signal.throwIfAborted()

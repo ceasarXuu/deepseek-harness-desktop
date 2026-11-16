@@ -10,7 +10,7 @@ declare module '@deepseek-ai/dsh-llm' {
 
 export function discoveredTools(context: ToolActivationContext): Set<string> {
   const names = new Set<string>()
-  for (const message of context.agent.session.deriveMessages()) {
+  for (const message of [...context.agent.session.deriveMessages(), ...context.messages ?? []]) {
     if (message.role !== 'user' || message.source.kind !== 'tool-discovery') continue
     if (!Array.isArray(message.source.names)) continue
     for (const name of message.source.names) if (typeof name === 'string') names.add(name)
@@ -29,8 +29,11 @@ export function createToolSearch(candidates: (context: ToolActivationContext['ag
     },
     async execute({ query }, exec) {
       if (!exec.agent) return 'Tool search requires a session.'
-      const words = [...new Set(query.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])]
-      const ranked = candidates(exec.agent).map((tool) => {
+      const normalizedQuery = query.trim().toLowerCase()
+      const tools = candidates(exec.agent)
+      const exact = tools.find(tool => tool.name.toLowerCase() === normalizedQuery)
+      const words = [...new Set(normalizedQuery.match(/[\p{L}\p{N}]+/gu) ?? [])]
+      const ranked = exact ? [{ name: exact.name, score: 1 }] : tools.map((tool) => {
         const name = tool.name.toLowerCase()
         const metadata = tool.description.toLowerCase()
         const score = words.reduce((sum, word) => sum + (name.includes(word) ? 3 : metadata.includes(word) ? 1 : 0), 0)

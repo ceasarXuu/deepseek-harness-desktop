@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import LlmRuntime, { LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { LlmAdapter, ToolCallId, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -39,9 +39,11 @@ it('discovers only visible MCP tools on a capable route and keeps execution guar
     register('read')
     register('mcp__inventory__read', true)
     register('mcp__inventory__hidden', true)
+    register('mcp__inventory__other', true)
     scope.ctx.tools.restrict({ deny: ['mcp__inventory__hidden'] })
     const signal = new AbortController().signal
-    const resolve = (model: string) => ctx.tools.resolve({ agent, modelSelection: { provider: 'openai-codex', model }, signal })
+    const resolve = (model: string, messages?: readonly UserMessage[]) =>
+      ctx.tools.resolve({ agent, modelSelection: { provider: 'openai-codex', model }, signal, ...messages === undefined ? {} : { messages } })
     const names = (set: Awaited<ReturnType<typeof resolve>>) => ctx.tools.schemas(agent, set).map(tool => tool.name)
     const initial = await resolve('capable')
     expect(names(initial).sort()).toEqual(['read', 'tool_search'])
@@ -49,18 +51,19 @@ it('discovers only visible MCP tools on a capable route and keeps execution guar
       callId: ToolCallId(name), name, arguments: args, signal, agent, toolSet,
     })
     expect((await execute('mcp__inventory__read', initial)).error?.info?.code).toBe('UNKNOWN_TOOL')
-    const result = await execute('tool_search', initial, { query: 'inventory' })
+    const result = await execute('tool_search', initial, { query: 'mcp__inventory__read' })
     expect(result.isError).toBe(false)
     expect(result.additionalContexts).toHaveLength(1)
-    for (const message of result.additionalContexts ?? []) {
-      session.append('user/message', message, { surfaceOp: 'append' })
-    }
     initial.dispose()
-    const next = await resolve('capable')
+    const next = await resolve('capable', result.additionalContexts)
     expect(names(next).sort()).toEqual(['mcp__inventory__read', 'read', 'tool_search'])
     expect((await execute('mcp__inventory__read', next)).isError).toBe(false)
     expect(calls).toBe(1)
-    expect(names(await resolve('unsupported')).sort()).toEqual(['mcp__inventory__read', 'read'])
+    for (const message of result.additionalContexts ?? []) {
+      session.append('user/message', message, { surfaceOp: 'append' })
+    }
+    expect(names(await resolve('capable')).sort()).toEqual(['mcp__inventory__read', 'read', 'tool_search'])
+    expect(names(await resolve('unsupported')).sort()).toEqual(['mcp__inventory__other', 'mcp__inventory__read', 'read'])
   } finally {
     await ctx.fiber.dispose()
   }

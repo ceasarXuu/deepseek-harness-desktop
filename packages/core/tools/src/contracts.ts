@@ -108,6 +108,8 @@ export interface ToolActivationContext {
   readonly agent: Agent
   /** Provider, model, and optional reasoning effort captured for the step. */
   readonly modelSelection: Readonly<ModelSelection>
+  /** Model-visible inbox messages claimed for this step, before they are committed. */
+  readonly messages?: readonly UserMessage[]
   /** Cancellation of step preparation; asynchronous conditions must observe it. */
   readonly signal: AbortSignal
 }
